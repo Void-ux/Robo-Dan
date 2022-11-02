@@ -1,0 +1,46 @@
+services:
+
+    db:
+        restart: unless-stopped
+        container_name: rdan_db
+        # Can be shortened with ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+        build: ./postgres
+        # To test on a host machine set ports to 5432:5432 to allow external connections
+        ports:
+            - 5432:5432
+        environment:
+            POSTGRES_USER : postgres
+            POSTGRES_PASSWORD : Uiu6^tFRFVMwiJQNQn3Z9sCEbS^HiNQPnGpAN!d!2LHY&@6#tvL3et^Skqe%ds5K
+            POSTGRES_DB : postgres
+            PGDATA: /var/lib/postgresql/data/pgdata
+        volumes:
+            - type: volume
+              source: rdan-db
+              target: /var/lib/postgresql/data
+
+    lavalink:
+        container_name: rdan_lavalink
+        restart: always
+        image: fredboat/lavalink:master
+        volumes:
+            - ./application.yml:/opt/Lavalink/application.yml
+
+    bot:
+        restart: unless-stopped
+        container_name: rdan_bot
+        build: .
+        depends_on:
+            - db
+        env_file:
+          - .env
+        command:
+            [
+                "./wait-for-it.sh",
+                 rdan_db:5432",
+                "--",
+                "python3",
+                "main.py"
+            ]
+
+volumes:
+ rdan-db:
