@@ -22,6 +22,7 @@ from discord.ext import commands
 
 from utils.context import Context
 from cogs import EXTENSIONS
+from cogs.youtube import DownloadControls
 
 try:
     import uvloop  # type: ignore
@@ -138,6 +139,7 @@ class Bot(commands.Bot):
 
         self.config = config_file
         self.add_check(self.ctx_check)
+        self.add_view(DownloadControls())
         self.tree.interaction_check = self.interaction_check
         self.global_log = logging.getLogger()
 

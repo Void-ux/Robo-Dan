@@ -1,7 +1,8 @@
-import asyncio
+from __future__ import annotations
+
 import functools
 import tempfile
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 from pathlib import Path
 
 import discord
@@ -9,8 +10,11 @@ import yt_dlp
 from discord import app_commands
 from discord.ext import commands
 
-from main import Bot
+from utils import affirmation_embed
 from utils.context import GuildContext
+if TYPE_CHECKING:
+    from main import Bot
+    from utils.interaction import Interaction
 
 
 def download(url: str, temp: tempfile._TemporaryFileWrapper, _format: Literal['mp3', 'mp4']) -> None:
@@ -36,13 +40,36 @@ def download(url: str, temp: tempfile._TemporaryFileWrapper, _format: Literal['m
     temp.seek(0)
 
 
+class DownloadControls(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label='Delete', style=discord.ButtonStyle.red, custom_id='downloadcontrols:delete')
+    async def callback(self, interaction: Interaction, button: discord.ui.Button):
+        query = """SELECT file_name, file_id FROM files
+                   WHERE message_id=$1
+                """
+        file_name, file_id = await interaction.client.pool.fetchrow(query, interaction.message.id)
+
+        await interaction.client.bucket.delete_file(file_name, file_id)
+
+        button.disabled = True
+        await interaction.message.edit(view=self)
+
+        await interaction.response.send_message(
+            embed=affirmation_embed("Your file has been successfully **deleted**\n"
+                                    "You may still be able view it using the link due to caching")
+        )
+
+
 class YouTube(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: Bot):
         self.bot = bot
 
     @commands.hybrid_command(aliases=['dl'])
+    @commands.is_owner()
     @app_commands.rename(_format='format')
-    async def download(self, ctx: GuildContext, query: str, _format: Literal['mp4', 'mp3']):
+    async def download(self, ctx: GuildContext, query: str, _format: Literal['mp4', 'mp3'] = 'mp4'):
         await ctx.typing()
 
         with tempfile.NamedTemporaryFile(dir=Path(__file__).resolve().parent.parent, suffix=f'.{_format}') as temp:
@@ -58,18 +85,19 @@ class YouTube(commands.Cog):
                 file = await self.bot.bucket.upload_file(
                     content_bytes=path.read_bytes(),
                     content_type='video/webm',
-                    file_name=path.name,
+                    file_name=f'downloads/{path.name}',
                     bucket_id=self.bot.config['backblaze']['bucket_id'],
                 )
                 link = f'https://cdn.overseer.tech/file/imooog/{file.name}'
-                view = discord.ui.View()
+
+                view = DownloadControls()
+                # we want to add the link here as passing it into the __init__ would cause problems
+                # with bot.add_view in main.py
                 view.add_item(discord.ui.Button(label='Go to video', url=link))
-                await ctx.send((
-                    'Your file has exceeded 8mb, therefore it has been uploaded here **(expires in 5 minutes)**:\n'
-                    f'{link}'), view=view
-                )
-                await asyncio.sleep(300)
-                await self.bot.bucket.delete_file(file.name, file.id)
+
+                msg = await ctx.send(f'Your file has exceeded 8mb, therefore it has been uploaded here:\n{link}', view=view)
+                await self.bot.pool.execute('INSERT INTO files (message_id, file_name, file_id) VALUES ($1, $2, $3)',
+                                            msg.id, file.name, file.id)
 
 
 async def setup(bot: Bot):
