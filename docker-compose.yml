@@ -18,12 +18,12 @@ services:
               source: rdan-db
               target: /var/lib/postgresql/data
 
-    lavalink:
-        container_name: rdan_lavalink
-        restart: always
-        image: fredboat/lavalink:master
-        volumes:
-            - ./application.yml:/opt/Lavalink/application.yml
+    #lavalink:
+    #    container_name: rdan_lavalink
+    #    restart: always
+    #    image: fredboat/lavalink:master
+    #    volumes:
+    #        - ./application.yml:/opt/Lavalink/application.yml
 
     bot:
         restart: unless-stopped
