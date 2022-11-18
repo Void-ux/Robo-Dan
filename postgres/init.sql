@@ -25,3 +25,11 @@ CREATE TABLE IF NOT EXISTS commands
     slash      BOOLEAN,
     failed     BOOLEAN
 );
+
+-- File names/ids for Backblaze on downloaded files for DownloadControls panel
+CREATE TABLE IF NOT EXISTS files
+(
+    message_id BIGINT PRIMARY KEY,
+    file_name  TEXT NOT NULL,
+    file_id    TEXT NOT NULL
+)
