@@ -105,19 +105,7 @@ async def init(conn):
                               decoder=_decode_jsonb,
                               format='text')
 
-intents = discord.Intents(
-    dm_messages=True,
-    emojis_and_stickers=True,
-    guild_messages=True,
-    guild_reactions=True,
-    guilds=True,
-    members=True,
-    message_content=True,
-    messages=True,
-    reactions=True,
-    voice_states=True,
-    webhooks=True
-)
+intents = discord.Intents.all()
 
 
 class Bot(commands.Bot):
@@ -202,14 +190,10 @@ class Bot(commands.Bot):
         return hook
 
     async def ctx_check(self, ctx: Context) -> bool:
-        if ctx.author.id == 723943620054614047:
-            return True
-        return False
+        return ctx.author.id == 723943620054614047
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id == 723943620054614047:
-            return True
-        return False
+        return interaction.user.id == 723943620054614047
 
     async def get_context(self, message, *, cls=Context):
         return await super().get_context(message, cls=cls)
@@ -255,11 +239,11 @@ async def main():
         bot.session = session
 
         bot.bucket = aiob2.Client(
-            aiob2.B2ConnectionInfo(config_file['backblaze']['key_id'], config_file['backblaze']['app_id'])
+            config_file['backblaze']['key'], config_file['backblaze']['key_id']
         )
         bot.mystbin = mystbin.Client()
 
-        with SetupLogging():
+        with SetupLogging(stream=False):
             await bot.load_extension("jishaku")
             for extension in EXTENSIONS:
                 await bot.load_extension(extension)
@@ -269,5 +253,4 @@ async def main():
             await bot.start()
 
 if __name__ == '__main__':
-    startup_webhook = discord.SyncWebhook.from_url(config_file['startup']['webhook_url'])
     asyncio.run(main())
