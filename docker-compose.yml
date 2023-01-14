@@ -33,14 +33,6 @@ services:
             - db
         env_file:
           - .env
-        command:
-            [
-                "./wait-for-it.sh",
-                 rdan_db:5432",
-                "--",
-                "python3",
-                "main.py"
-            ]
 
 volumes:
  rdan-db:
