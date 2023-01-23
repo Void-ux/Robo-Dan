@@ -1,5 +1,4 @@
 config.toml
-cogs/nsfw.py
 
 .vscode
 *.sublime-project
