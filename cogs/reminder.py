@@ -146,7 +146,7 @@ class Reminder(commands.Cog):
     def display_emoji(self) -> discord.PartialEmoji:
         return discord.PartialEmoji(name='\N{ALARM CLOCK}')
 
-    def cog_unload(self) -> None:
+    def cog_unload(self) -> None:  # type: ignore
         self._task.cancel()
 
     async def get_active_timer(self, *, connection: asyncpg.Connection | None = None, days: int = 7) -> Timer | None:
@@ -208,6 +208,7 @@ class Reminder(commands.Cog):
 
     async def create_timer(self, when: datetime.datetime, event: str, /, *args: Any, **kwargs: Any) -> Timer:
         r"""Creates a timer.
+
         Parameters
         -----------
         when: datetime.datetime
@@ -225,9 +226,11 @@ class Reminder(commands.Cog):
         created: datetime.datetime
             Special keyword-only argument to use as the creation time.
             Should make the timedeltas a bit more consistent.
+
         Note
-        ------
+        ----
         Arguments and keyword arguments must be JSON serialisable.
+
         Returns
         --------
         :class:`Timer`
@@ -279,12 +282,14 @@ class Reminder(commands.Cog):
         when: Annotated[time.FriendlyTimeResult, time.UserFriendlyTime(commands.clean_content, default='…')]  # noqa
     ):
         """Reminds you of something after a certain amount of time.
+
         The input can be any direct date (e.g. YYYY-MM-DD) or a human
         readable offset. Examples:
         - "next thursday at 3pm do something funny"
         - "do the dishes tomorrow"
         - "in 3 days do the thing"
         - "2d unmute someone"
+
         Times are in UTC.
         """
 
@@ -303,6 +308,7 @@ class Reminder(commands.Cog):
     @reminder.command(name='list', aliases=['ls'])
     async def reminder_list(self, ctx: GuildContext):
         """Shows the 10 latest currently running reminders."""
+
         query = """SELECT id, expires, extra #>> '{args,2}'
                    FROM reminders
                    WHERE event = 'reminder'
@@ -333,7 +339,9 @@ class Reminder(commands.Cog):
     @app_commands.rename(_id='id')
     async def reminder_delete(self, ctx: GuildContext, _id: str):
         """Deletes a reminder by its ID.
+
         To get a reminder ID, use the reminder list command.
+
         You must own the reminder to delete it, obviously.
         """
 
