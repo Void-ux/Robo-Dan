@@ -6,7 +6,6 @@ import mystbin
 import datetime
 import json
 import logging
-import os
 import pathlib
 from collections import Counter
 from logging.handlers import RotatingFileHandler
@@ -21,11 +20,12 @@ from colorama import Fore, Style
 from discord.ext import commands
 
 from utils.context import Context
+from utils.sonarr import Client as SonarrClient
 from cogs import EXTENSIONS
 from cogs.youtube import DownloadControls
 
 try:
-    import uvloop  # type: ignore
+    import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     logging.info(f'{Fore.GREEN} Successfully installed uvloop.{Style.RESET_ALL}')
 except Exception as e:
@@ -35,14 +35,9 @@ except Exception as e:
 
 file_path = Path(__file__).resolve().parent / "config.toml"
 with open(file_path, "r") as file:
-    config_file = toml.load(file)
+    config = toml.load(file)
 
-os.environ['JISHAKU_FORCE_PAGINATOR'] = "True"
-os.environ['JISHAKU_NO_UNDERSCORE'] = "True"
-os.environ['JISHAKU_NO_DM_TRACEBACK'] = "True"
-os.environ['JISHAKU_HIDE'] = "True"
-
-LOGGER = logging.getLogger("robo_dan")
+log = logging.getLogger("robo_dan")
 
 
 class RemoveNoise(logging.Filter):
@@ -66,7 +61,10 @@ class SetupLogging:
     def __enter__(self):
         logging.getLogger("discord").setLevel(logging.INFO)
         logging.getLogger("discord.http").setLevel(logging.WARNING)
+        logging.getLogger('aiob2').setLevel(logging.DEBUG)
+        logging.getLogger('utils.sonarr').setLevel(logging.DEBUG)
         logging.getLogger("discord.state").addFilter(RemoveNoise())
+
 
         self.log.setLevel(logging.INFO)
         handler = RotatingFileHandler(
@@ -99,11 +97,13 @@ def _decode_jsonb(value):
 
 
 async def init(conn):
-    await conn.set_type_codec('jsonb',
-                              schema='pg_catalog',
-                              encoder=_encode_jsonb,
-                              decoder=_decode_jsonb,
-                              format='text')
+    await conn.set_type_codec(
+        'jsonb',
+        schema='pg_catalog',
+        encoder=_encode_jsonb,
+        decoder=_decode_jsonb,
+        format='text'
+    )
 
 intents = discord.Intents.all()
 
@@ -112,6 +112,7 @@ class Bot(commands.Bot):
     pool: asyncpg.Pool
     session: aiohttp.ClientSession
     bucket: aiob2.Client
+    sonarr: SonarrClient
     mystbin: mystbin.Client
     command_stats: Counter[str]
     socket_stats: Counter[str]
@@ -119,13 +120,13 @@ class Bot(commands.Bot):
 
     def __init__(self):
         super().__init__(
-            command_prefix=commands.when_mentioned_or(config_file['startup']['prefix']),
+            command_prefix=commands.when_mentioned_or(config['startup']['prefix']),
             intents=intents,
-            owner_ids=tuple(config_file['startup']['owner_ids']),
+            owner_ids=tuple(config['startup']['owner_ids']),
             chunk_guilds_at_startup=True
         )
 
-        self.config = config_file
+        self.config = config
         self.add_check(self.ctx_check)
         self.add_view(DownloadControls())
         self.tree.interaction_check = self.interaction_check
@@ -201,18 +202,12 @@ class Bot(commands.Bot):
     async def startup_message(self):
         await self.wait_until_ready()
 
-        c = self.get_channel(self.config['startup']['startup_messages'])
-        await c.send('Internal cache is ready.')
+        log.info('Bot is ready with a populated cache')
 
     async def setup_hook(self) -> None:
         self.launch_time = datetime.datetime.utcnow()
 
-    def run(self, token: str = None) -> None:
-        return super().run(
-            token or self.config['startup']['token']
-        )
-
-    async def start(self, token: str = None, *, reconnect: bool = True) -> None:
+    async def start(self, token: str | None = None, *, reconnect: bool = True) -> None:
         await super().start(
             token or self.config['startup']['token'],
             reconnect=reconnect
@@ -228,7 +223,7 @@ class Bot(commands.Bot):
 
 async def main():
     async with Bot() as bot:
-        pool = await asyncpg.create_pool(**config_file['database'], init=init)
+        pool = await asyncpg.create_pool(**config['database'], init=init)
 
         if pool is None:
             # thanks asyncpg...
@@ -238,10 +233,9 @@ async def main():
         session = aiohttp.ClientSession()
         bot.session = session
 
-        bot.bucket = aiob2.Client(
-            config_file['backblaze']['key'], config_file['backblaze']['key_id']
-        )
+        bot.bucket = aiob2.Client(config['backblaze']['key_id'], config['backblaze']['key'], log_handler=None)
         bot.mystbin = mystbin.Client()
+        bot.sonarr = SonarrClient(**config['sonarr'])
 
         with SetupLogging(stream=False):
             await bot.load_extension("jishaku")
