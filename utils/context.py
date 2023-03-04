@@ -1,10 +1,13 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
 
 import discord
 from discord.ext import commands
 from wavelink import Player
 
 from .emotes import CROSS_EMOTE, CHECK_EMOTE
+if TYPE_CHECKING:
+    from main import Bot
 
 
 class ConfirmationView(discord.ui.View):
@@ -29,8 +32,8 @@ class ConfirmationView(discord.ui.View):
 
     async def disable_buttons(self, interaction: discord.Interaction) -> None:
         for i in self.children:
-            i.disabled = True
-        await interaction.message.edit(view=self)
+            i.disabled = True  # type: ignore
+        await interaction.message.edit(view=self)  # type: ignore
 
     @discord.ui.button(label='Confirm', emoji=CHECK_EMOTE, style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button):
@@ -54,6 +57,8 @@ class ConfirmationView(discord.ui.View):
 
 
 class Context(commands.Context):
+    bot: Bot
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -115,4 +120,4 @@ class GuildContext(Context):
     channel: discord.VoiceChannel | discord.TextChannel | discord.Thread
     me: discord.Member
     prefix: str
-    voice_client: Player
+    voice_client: Player  # type: ignore

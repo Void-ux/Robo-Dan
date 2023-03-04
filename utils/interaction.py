@@ -4,4 +4,4 @@ from main import Bot
 
 
 class Interaction(discord.Interaction):
-    client: Bot  # type: ignore
+    client: Bot
