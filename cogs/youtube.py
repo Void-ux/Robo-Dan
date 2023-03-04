@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import functools
-import tempfile
+import os
+import uuid
+import time
+from urllib.parse import quote_plus as qp
 from typing import Literal, TYPE_CHECKING
 from pathlib import Path
 
@@ -17,48 +20,65 @@ if TYPE_CHECKING:
     from utils.interaction import Interaction
 
 
-def download(url: str, temp: tempfile._TemporaryFileWrapper, _format: Literal['mp3', 'mp4']) -> None:
+def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> dict | None:
+    path = Path(__file__).parent / 'downloads'
     ydl_opts = {
-        'outtmpl': temp.name,
-        'updatetime': False,
-        'overwrites': True
+        "format": "bv*+ba/b",
+        "outtmpl": {
+            "default": f'{str(path)}/{file_name}.%(ext)s'
+        },
+        "overwrites": True,
+        "continuedl": False,
+        "verbose": True,
+        "merge_output_format": "mkv",
+        "final_ext": "mkv",
+        "postprocessors": [
+            {
+                "key": "FFmpegVideoRemuxer",
+                "preferedformat": "mkv"
+            }
+        ]
     }
-    if _format == 'mp4':
-        ydl_opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4'
-    else:
+
+    if _format == 'all':
+        # Download best format that contains video,
+        # and if it doesn't already have an audio stream,
+        # merge it with best audio-only format
+        ydl_opts['format'] = 'bv*+ba/b'
+    elif _format == 'audio':
         ydl_opts['format'] = 'bestaudio/best'
+        ydl_opts['prefer_ffmpg'] = True
         ydl_opts['postprocessors'] = [{
             'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
         }]
-        ydl_opts['prefer_ffmpg'] = True
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url)
         ydl.download([url])
 
-    temp.seek(0)
+    return info
 
 
 class DownloadControls(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label='Delete', style=discord.ButtonStyle.red, custom_id='downloadcontrols:delete')
+    @discord.ui.button(label='Delete', style=discord.ButtonStyle.red, custom_id='downloadcontrols:delete')  # type: ignore
     async def callback(self, interaction: Interaction, button: discord.ui.Button):
         query = """SELECT file_name, file_id FROM files
                    WHERE message_id=$1
                 """
-        file_name, file_id = await interaction.client.pool.fetchrow(query, interaction.message.id)
+        file_name, file_id = await interaction.client.pool.fetchrow(query, interaction.message.id)  # type: ignore
 
         await interaction.client.bucket.delete_file(file_name, file_id)
 
         button.disabled = True
-        await interaction.message.edit(view=self)
+        await interaction.message.edit(view=self)  # type: ignore
 
         await interaction.response.send_message(
-            embed=affirmation_embed("Your file has been successfully **deleted**\n"
-                                    "You may still be able view it using the link due to caching")
+            embed=affirmation_embed(
+                "Your file has been successfully **deleted**\nYou may still be able view it using the link due to caching"
+                )
         )
 
 
@@ -66,38 +86,76 @@ class YouTube(commands.Cog):
     def __init__(self, bot: Bot):
         self.bot = bot
 
-    @commands.hybrid_command(aliases=['dl'])
+    @commands.hybrid_command(aliases=['yt'])
     @commands.is_owner()
     @app_commands.rename(_format='format')
-    async def download(self, ctx: GuildContext, query: str, _format: Literal['mp4', 'mp3'] = 'mp4'):
+    @app_commands.choices(
+        _format=[
+            app_commands.Choice(name='Audio and Video', value='all'),
+            app_commands.Choice(name='Audio', value='audio')
+        ]
+    )
+    async def yt_download(self, ctx: GuildContext, query: str, _format: Literal['audio', 'all'] = 'all'):
+        """
+        Downloads a video from one of thousands of hosts online such as YouTube, Reddit, TikTok, etc.
+
+        `Audio and Video` will download the highest quality format with video, and if it doesn't have an audio
+        stream, it'll merge it with the best audio-only format. It'll be returned as a `.mkv` so that the thumbnail can be
+        embedded.
+        `Audio` will download the best audio-only format. The format will not change to prevent data loss.
+        """
         await ctx.typing()
+        uuid_ = str(uuid.uuid4())
 
-        with tempfile.NamedTemporaryFile(dir=Path(__file__).resolve().parent.parent, suffix=f'.{_format}') as temp:
-            # We use partial to make the code look cleaner, even though we
-            # could technically pass it in to run_in_executor
-            partial = functools.partial(download, query, temp, _format)
+        # We use partial to make the code look cleaner, even though we
+        # could technically pass it in to run_in_executor
+        partial = functools.partial(download, query, uuid_, _format)
 
-            await self.bot.loop.run_in_executor(None, partial)
-            path = Path(temp.name)
-            try:
-                await ctx.send(file=discord.File(fp=path, filename=f'output.{_format}'))
-            except discord.HTTPException:
-                file = await self.bot.bucket.upload_file(
-                    content_bytes=path.read_bytes(),
-                    content_type='video/webm',
-                    file_name=f'downloads/{path.name}',
+        start = time.perf_counter()
+        info = await self.bot.loop.run_in_executor(None, partial)
+        end = time.perf_counter()
+        assert info is not None
+        download_time = end - start
+
+        file = [i for i in (Path(__file__).parent / 'downloads').iterdir() if i.name.startswith(uuid_)][0]
+        file_name = f"{info['title']}.{info['ext']}"
+
+        # bots have a limit of 8mb per file
+        try:
+            if len(file.read_bytes()) <= 8_388_608:
+                await ctx.reply(
+                    f'Took `{download_time:.2f}` seconds to download.',
+                    file=discord.File(fp=file, filename=f"{info['title']}.{info['ext']}")
+                )
+            else:
+                # avoid overwriting the OS file defined above
+                start = time.perf_counter()
+                _file = await self.bot.bucket.upload_file(
+                    content_bytes=file.read_bytes(),
+                    content_type='video/x-matroska',
+                    file_name=f'downloads/{file_name}',
                     bucket_id=self.bot.config['backblaze']['bucket_id'],
                 )
-                link = f'https://cdn.overseer.tech/file/imooog/{file.name}'
+                end = time.perf_counter()
+                upload_time = end - start
+                link = f'https://cdn.overseer.tech/file/imooog/downloads/{qp(file_name)}'
 
                 view = DownloadControls()
                 # we want to add the link here as passing it into the __init__ would cause problems
                 # with bot.add_view in main.py
                 view.add_item(discord.ui.Button(label='Go to video', url=link))
 
-                msg = await ctx.send(f'Your file has exceeded 8mb, therefore it has been uploaded here:\n{link}', view=view)
-                await self.bot.pool.execute('INSERT INTO files (message_id, file_name, file_id) VALUES ($1, $2, $3)',
-                                            msg.id, file.name, file.id)
+                msg = await ctx.reply(
+                    f"Took `{download_time:.2f}` seconds to download and `{upload_time:.2f}` seconds to upload.\n"
+                    f"If there's no video embed below, click the URL to view it in your browser.\n{link}",
+                    view=view
+                )
+                await self.bot.pool.execute(
+                    'INSERT INTO files (message_id, file_name, file_id) VALUES ($1, $2, $3)',
+                    msg.id, _file.name, _file.id
+                )
+        finally:
+            os.remove(str(file))
 
 
 async def setup(bot: Bot):
