@@ -19,5 +19,4 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry install --only main
 
 COPY . .
-RUN chmod +x wait-for-it.sh
 CMD ["python3", "main.py"]
