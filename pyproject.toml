@@ -16,21 +16,24 @@ psutil = "^5.9.2"
 python-dateutil = "^2.8.2"
 parsedatetime = "^2.6"
 jishaku = "^2.5.1"
-yt-dlp = "^2022.9.1"
+yt-dlp = "^2023.3.3"
 mystbin-py = "^5.0.2"
 orjson = "^3.8.0"
-uvloop = { version = "^0.16.0", markers = "sys_platform == 'linux'" }
+uvloop = { version = "^0.17.0", markers = "sys_platform == 'linux'" }
 humanize = "^4.3.0"
 wavelink = "^1.3.2"
 aiob2 = {git = "https://github.com/Void-ux/aiob2.git", rev = "master"}
+beautifulsoup4 = "^4.11.1"
 
 [tool.poetry.dev-dependencies]
 
+[tool.poetry.group.dev.dependencies]
+isort = "^5.11.4"
+
 [tool.pyright]
-venvPath = "C:\\Users\\MS1\\AppData\\Local\\pypoetry\\Cache\\virtualenvs\\"
-venv = "robo_dan-2tPVQ_ju-py3.10"
+venvPath = "/home/dan/.cache/pypoetry/virtualenvs"
+venv = "robo_dan-xAwpTgwo-py3.11"
 typeCheckingVersion = "off"
 pythonVersion = "3.10"
 reportUnusedImport = "error"
 reportUnnecessaryTypeIgnoreComment = "error"
-reportIncompatibleMethodOverride = "error"
