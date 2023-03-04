@@ -81,11 +81,12 @@ class ErrorHandler(commands.Cog):
         elif isinstance(error, commands.MemberNotFound):
             return await ctx.send(embed=ErrorEmbed(
                 author=ctx.author,
-                description=(
-                    '**Please provide a valid member for that command. Ensure that:**\n'
-                    '> The member is currently in the server\n> The ID / name was copied correctly\n > You '
-                    'have the right ID / name.'
-                    )
+                description='\n'.join([
+                    '**Please provide a valid member for that command. Ensure that:**',
+                    '> The member is currently in the server',
+                    '> The ID / name was copied correctly',
+                    '> You have the right ID / name'
+                ])
                 )
             )
 
@@ -106,24 +107,12 @@ class ErrorHandler(commands.Cog):
             ))
 
         elif isinstance(error, commands.CheckFailure):
-            # May as well keep members from trying to use -ban silent, respond in interactions to prevent a failed one.
             if not ctx.interaction:
                 return
 
             return await ctx.send(
                 embed=error_embed('You do not have the required permissions to use this command.'),
                 ephemeral=True
-            )
-
-        elif isinstance(error, discord.app_commands.TransformerError) and error.type == discord.AppCommandOptionType.user:
-            return await ctx.send(embed=ErrorEmbed(
-                author=ctx.author,
-                description=(
-                    '**Please provide a valid member for that command. Ensure that:**\n'
-                    '> The member is currently in the server\n> The ID / name was copied correctly\n > You '
-                    'have the right ID / name.'
-                    )
-                )
             )
 
         elif isinstance(error, (commands.MissingRequiredArgument, commands.BadArgument)):
