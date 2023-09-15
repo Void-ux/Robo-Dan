@@ -5,14 +5,10 @@ services:
     container_name: rdan_db
     # Can be shortened with ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     build: ./postgres
-    # To test on a host machine set ports to 5432:5432 to allow external connections
-    #ports:
-      # - 5432:5432
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-      POSTGRES_DB: postgres
-      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - 5432:5432
+    env_file:
+      - ./postgres/.env
     volumes:
       - type: volume
         source: rdan-db
@@ -62,8 +58,6 @@ services:
       - /home/dan/robo-dan/servarr/data:/data
     depends_on:
       - db
-    env_file:
-      - .env
     command:
       [
         "python3",
