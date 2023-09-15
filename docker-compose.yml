@@ -58,11 +58,6 @@ services:
       - /home/dan/robo-dan/servarr/data:/data
     depends_on:
       - db
-    command:
-      [
-        "python3",
-        "main.py"
-      ]
 
 volumes:
   rdan-db:
