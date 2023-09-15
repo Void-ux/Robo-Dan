@@ -1,6 +1,6 @@
-import io
 import traceback
 import time
+from io import BytesIO
 from typing import Literal
 
 import discord
@@ -20,7 +20,7 @@ class Developer(commands.Cog):
     @app_commands.guilds(927189052531298384, 982641718119772200)  # DTT, Support Server
     @commands.is_owner()
     async def sync(
-            self, ctx: GuildContext, guilds: commands.Greedy[discord.Object], spec: Literal["~", "*", "^"] | None = None
+        self, ctx: GuildContext, guilds: commands.Greedy[discord.Object], spec: Literal["~", "*", "^"] | None = None
     ) -> None:
         if not guilds:
             if spec == "~":
@@ -92,8 +92,41 @@ class Developer(commands.Cog):
         render = table.render()
 
         fmt = f'\n{render}\n\n'
-        fp = io.BytesIO(fmt.encode('utf-8'))
+        fp = BytesIO(fmt.encode('utf-8'))
         await ctx.send(f'*Returned {formats.plural(rows):row} in {dt:.2f}ms*', file=discord.File(fp, 'results.txt'))
+
+    @commands.command()
+    @commands.is_owner()
+    async def load(self, ctx, *, module: str):
+        """Loads a module."""
+        try:
+            await self.bot.load_extension(f'cogs.{module}')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
+        else:
+            await ctx.send('\N{OK HAND SIGN}')
+
+    @commands.command()
+    @commands.is_owner()
+    async def unload(self, ctx, module: str):
+        """Unloads a module."""
+        try:
+            await self.bot.unload_extension(f'cogs.{module}')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
+        else:
+            await ctx.send('\N{OK HAND SIGN}')
+
+    @commands.command()
+    @commands.is_owner()
+    async def reload(self, ctx: GuildContext, *, module: str):
+        """Reloads a module."""
+        try:
+            await self.bot.reload_extension(f'cogs.{module}')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
+        else:
+            await ctx.send('\N{OK HAND SIGN}')
 
 
 async def setup(bot: Bot):
