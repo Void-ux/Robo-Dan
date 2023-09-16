@@ -6,7 +6,7 @@ from typing import Any
 import discord
 from discord.ext import commands
 
-from main import Bot
+from bot import Bot
 from utils import error_embed
 from utils.context import Context
 

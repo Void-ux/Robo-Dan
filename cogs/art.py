@@ -8,7 +8,7 @@ import discord
 from discord.ext import commands
 from PIL import Image, ImageFont, ImageDraw
 
-from main import Bot
+from bot import Bot
 from utils.context import Context
 
 

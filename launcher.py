@@ -4,29 +4,21 @@ import os
 import asyncio
 import aiob2
 import mystbin
-import datetime
-import json
 import logging
 import pathlib
-from collections import Counter
+import json
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import aiohttp
 import asyncpg
-import discord
 import toml
 from colorama import Fore, Style
-from discord.ext import commands
 
-from utils.context import Context
 from utils.sonarr import Client as SonarrClient
 from cogs import EXTENSIONS
-from cogs.youtube import DownloadControls
-
-if TYPE_CHECKING:
-    from cogs.reminder import Reminder
+from bot import Bot, Config
 
 try:
     import uvloop
@@ -44,7 +36,7 @@ os.environ['JISHAKU_HIDE'] = 'True'
 
 file_path = Path(__file__).resolve().parent / "config.toml"
 with open(file_path, "r") as file:
-    config = toml.load(file)
+    config: Config = toml.load(file)  # type: ignore
 
 
 class RemoveNoise(logging.Filter):
@@ -155,79 +147,9 @@ async def init(conn):
         format='text'
     )
 
-intents = discord.Intents.all()
-
-
-class Bot(commands.Bot):
-    pool: asyncpg.Pool
-    session: aiohttp.ClientSession
-    bucket: aiob2.Client
-    sonarr: SonarrClient
-    mystbin: mystbin.Client
-    command_stats: Counter[str]
-    socket_stats: Counter[str]
-    launch_time: datetime.datetime
-
-    def __init__(self):
-        super().__init__(
-            command_prefix=commands.when_mentioned_or(config['startup']['prefix']),
-            intents=intents,
-            owner_ids=tuple(config['startup']['owner_ids']),
-            chunk_guilds_at_startup=True
-        )
-
-        self.config = config
-        self.add_check(self.ctx_check)
-        self.add_view(DownloadControls())
-        self.tree.interaction_check = self.interaction_check
-        self.global_log = logging.getLogger()
-
-    @discord.utils.cached_property
-    def error_webhook(self):
-        hook = discord.Webhook.partial(
-            id=self.config['error']['wh_id'],
-            token=self.config['error']['wh_token'],
-            session=self.session
-        )
-        return hook
-
-    @property
-    def reminder(self) -> Reminder | None:
-        return self.get_cog('Reminder')  # type: ignore
-
-    async def ctx_check(self, ctx: Context) -> bool:
-        return ctx.author.id == 723943620054614047
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id == 723943620054614047
-
-    async def get_context(self, message, *, cls=Context):
-        return await super().get_context(message, cls=cls)
-
-    async def startup_message(self):
-        await self.wait_until_ready()
-
-        self.global_log.info('Bot is ready with a populated cache')
-
-    async def setup_hook(self) -> None:
-        self.launch_time = datetime.datetime.utcnow()
-
-    async def start(self, token: str | None = None, *, reconnect: bool = True) -> None:
-        await super().start(
-            token or self.config['startup']['token'],
-            reconnect=reconnect
-        )
-
-    async def close(self) -> None:
-        await super().close()
-        if hasattr(self, 'pool') and self.pool is not None:
-            await self.pool.close()
-        if hasattr(self, 'session') and self.session is not None:
-            await self.session.close()
-
 
 async def main():
-    async with Bot() as bot:
+    async with Bot(config) as bot:
         pool = await asyncpg.create_pool(**config['database'], init=init)
 
         if pool is None:
@@ -249,7 +171,7 @@ async def main():
         with SetupLogging(stream=False):
             asyncio.create_task(bot.startup_message())
 
-            await bot.start()
+            await bot.start(bot.config['token'])
 
 if __name__ == '__main__':
     asyncio.run(main())

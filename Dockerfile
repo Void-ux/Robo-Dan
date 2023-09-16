@@ -19,4 +19,4 @@ COPY pyproject.toml poetry.lock ./
 RUN poetry install --only main
 
 COPY . .
-CMD ["python3", "main.py"]
+CMD ["python3", "launcher.py"]

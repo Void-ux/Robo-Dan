@@ -17,7 +17,7 @@ import psutil
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from main import Bot
+from bot import Bot
 from utils import formats
 from utils.context import GuildContext
 from utils.emotes import LEADERBOARD_EMOTES

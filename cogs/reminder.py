@@ -14,7 +14,7 @@ from discord import app_commands
 from discord.ext import commands
 from lxml import etree
 
-from main import Bot
+from bot import Bot
 from utils import time, formats, db, cache, fuzzy, error_embed
 from utils.context import Context, GuildContext
 from cogs.error_handler import get_help

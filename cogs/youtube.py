@@ -16,7 +16,7 @@ from discord.ext import commands
 from utils import affirmation_embed
 from utils.context import GuildContext
 if TYPE_CHECKING:
-    from main import Bot
+    from bot import Bot
     from utils.interaction import Interaction
 
 
