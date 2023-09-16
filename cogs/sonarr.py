@@ -32,7 +32,7 @@ class EpisodeSelectorModal(discord.ui.Modal, title='Choose your episodes'):
 
     episode_range = discord.ui.TextInput(label='Episode(s)', placeholder='e.g. 1-5, 7, 3-6', style=discord.TextStyle.short)
 
-    async def on_submit(self, itx: Interaction):  # type: ignore
+    async def on_submit(self, itx: Interaction):
         try:
             self.season_number = int(str(self.season))
         except ValueError:
@@ -76,7 +76,7 @@ class SeriesSelector(discord.ui.Select):
 
         super().__init__(placeholder=tv_shows[0]['title'], options=options, row=0)
 
-    async def callback(self, interaction: Interaction):  # type: ignore
+    async def callback(self, interaction: Interaction):
         await interaction.response.defer()
         assert interaction.message is not None
         assert self.view is not None
@@ -92,6 +92,7 @@ class SeriesSelector(discord.ui.Select):
         else:
             self.view.exists = False
 
+        self.view.placeholder = None
         await interaction.message.edit(embed=e, view=self.view)
         # updates the view instance for when the download/bookmark
         # button is pressed
@@ -99,11 +100,12 @@ class SeriesSelector(discord.ui.Select):
 
 
 class DownloadPanel(discord.ui.View):
-    def __init__(self, tv_shows: list[SeriesPayload], author_id: int):
+    def __init__(self, tv_shows: list[SeriesPayload], author_id: int, *, bot: Bot):
         super().__init__(timeout=60)
         self.add_item(SeriesSelector(tv_shows))
 
         self.author_id = author_id
+        self.bot = bot
         self.message: discord.Message | None = None
 
         self.series: SeriesPayload = tv_shows[0]
@@ -112,7 +114,10 @@ class DownloadPanel(discord.ui.View):
         self.season: int | None = None
         self.exists: bool | None = None
 
-    async def interaction_check(self, interaction: Interaction) -> bool:  # type: ignore
+    async def prepare(self):
+        self.exists = bool(await self.bot.sonarr.get_series(self.series['tvdbId']))
+
+    async def interaction_check(self, interaction: Interaction) -> bool:
         assert interaction.message is not None
         if interaction.user.id == self.author_id:
             return True
@@ -189,7 +194,7 @@ async def monitor_download(
 
     large_file = await ctx.bot.bucket.upload_large_file(
         ctx.bot.config['backblaze']['bucket_id'],
-        f'sonarr/{file_name}.mkv'
+        f'sonarr/{file_name}'
     )
     start = time.perf_counter()
     with open(episode_file['path'], 'rb') as file:
@@ -217,7 +222,7 @@ async def monitor_download(
         )
 
     file = await large_file.finish()
-    return episode_file, f'https://cdn.overseer.tech/file/imooog/sonarr/{quote(file_name)}'
+    return episode_file, f'https://cdn.void-ux.com/file/imooog/sonarr/{quote(file_name)}'
 
 
 async def get_rotten_tomatoes_rating(series_name: str, session: aiohttp.ClientSession) -> tuple[int, int] | None:
@@ -399,7 +404,8 @@ class Sonarr(commands.Cog):
         if len(tv_shows) == 0:
             return await ctx.send(f'Sorry, nothing was found for {search_phrase}...')
 
-        view = DownloadPanel(tv_shows, ctx.author.id)
+        view = DownloadPanel(tv_shows[:25], ctx.author.id, bot=self.bot)
+        await view.prepare()
         e = await series_embed(tv_shows[0], self.bot.session)
         prompt = view.message = await ctx.send(embed=e, view=view)
         await view.wait()
@@ -415,10 +421,11 @@ class Sonarr(commands.Cog):
         # this'll handle add_series/bookmark and ensure
         # adding episodes doesn't break
         if not series_exists_locally:
-            await self.bot.sonarr.add_series(
+            series = await self.bot.sonarr.add_series(
                 tvdb_id=series['tvdbId'],
                 quality_profile_id=quality_profile,
-                root_dir='/data/media'
+                root_dir='/data/media',
+                monitored=False
             )
             await asyncio.sleep(3)
 
