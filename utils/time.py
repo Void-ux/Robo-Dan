@@ -2,75 +2,155 @@ from __future__ import annotations
 
 import datetime
 import re
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import parsedatetime as pdt
 from dateutil.relativedelta import relativedelta
+from discord import app_commands
 from discord.ext import commands
 
 from .context import Context
 from .formats import human_join, plural, format_dt
 
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
 
 class ShortTime:
-    compiled = re.compile("""(?:(?P<years>[0-9])(?:years?|y))?             # e.g. 2y
-                             (?:(?P<months>[0-9]{1,2})(?:months?|mo))?     # e.g. 2months
-                             (?:(?P<weeks>[0-9]{1,4})(?:weeks?|w))?        # e.g. 10w
-                             (?:(?P<days>[0-9]{1,5})(?:days?|d))?          # e.g. 14d
-                             (?:(?P<hours>[0-9]{1,5})(?:hours?|h))?        # e.g. 12h
-                             (?:(?P<minutes>[0-9]{1,5})(?:minutes?|m))?    # e.g. 10m
-                             (?:(?P<seconds>[0-9]{1,5})(?:seconds?|s))?    # e.g. 15s
-                          """, re.VERBOSE)
+    compiled = re.compile(
+        """
+           (?:(?P<years>[0-9])(?:years?|y))?                      # e.g. 2y
+           (?:(?P<months>[0-9]{1,2})(?:months?|mon?))?            # e.g. 2months
+           (?:(?P<weeks>[0-9]{1,4})(?:weeks?|w))?                 # e.g. 10w
+           (?:(?P<days>[0-9]{1,5})(?:days?|d))?                   # e.g. 14d
+           (?:(?P<hours>[0-9]{1,5})(?:hours?|hr?s?))?             # e.g. 12h
+           (?:(?P<minutes>[0-9]{1,5})(?:minutes?|m(?:ins?)?))?    # e.g. 10m
+           (?:(?P<seconds>[0-9]{1,5})(?:seconds?|s(?:ecs?)?))?    # e.g. 15s
+        """,
+        re.VERBOSE,
+    )
 
-    def __init__(self, argument, *, now=None):
+    discord_fmt = re.compile(r'<t:(?P<ts>[0-9]+)(?:\:?[RFfDdTt])?>')
+
+    dt: datetime.datetime
+
+    def __init__(
+        self,
+        argument: str,
+        *,
+        now: Optional[datetime.datetime] = None,
+        tzinfo: datetime.tzinfo = datetime.timezone.utc,
+    ):
         match = self.compiled.fullmatch(argument)
         if match is None or not match.group(0):
-            raise commands.BadArgument('invalid time provided')
+            match = self.discord_fmt.fullmatch(argument)
+            if match is not None:
+                self.dt = datetime.datetime.fromtimestamp(int(match.group('ts')), tz=datetime.timezone.utc)
+                if tzinfo is not datetime.timezone.utc:
+                    self.dt = self.dt.astimezone(tzinfo)
+                return
+            else:
+                raise commands.BadArgument('invalid time provided')
 
         data = {k: int(v) for k, v in match.groupdict(default=0).items()}
         now = now or datetime.datetime.now(datetime.timezone.utc)
-        self.dt = now + relativedelta(**data)
+        self.dt = now + relativedelta(**data)  # type: ignore
+        if tzinfo is not datetime.timezone.utc:
+            self.dt = self.dt.astimezone(tzinfo)
 
     @classmethod
-    async def convert(cls, ctx, argument):
-        return cls(argument, now=ctx.message.created_at)
+    async def convert(cls, ctx: Context, argument: str) -> Self:
+        tzinfo = datetime.timezone.utc
+        reminder = ctx.bot.reminder
+        if reminder is not None:
+            tzinfo = await reminder.get_tzinfo(ctx.author.id)
+        return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
 
 
 class HumanTime:
     calendar = pdt.Calendar(version=pdt.VERSION_CONTEXT_STYLE)
 
-    def __init__(self, argument: str, *, now: Optional[datetime.datetime] = None):
-        now = now or datetime.datetime.utcnow()
-        dt, status = self.calendar.parseDT(argument, sourceTime=now)
-        if not status.hasDateOrTime:
+    def __init__(
+        self,
+        argument: str,
+        *,
+        now: Optional[datetime.datetime] = None,
+        tzinfo: datetime.tzinfo = datetime.timezone.utc,
+    ):
+        now = now or datetime.datetime.now(tzinfo)
+        dt, status = self.calendar.parseDT(argument, sourceTime=now, tzinfo=None)
+        if not status.hasDateOrTime:  # type: ignore
             raise commands.BadArgument('invalid time provided, try e.g. "tomorrow" or "3 days"')
 
-        if not status.hasTime:
+        if not status.hasTime:  # type: ignore
             # replace it with the current time
             dt = dt.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
 
-        self.dt: datetime.datetime = dt
-        self._past: bool = dt < now
+        self.dt: datetime.datetime = dt.replace(tzinfo=tzinfo)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=datetime.timezone.utc)
+        self._past: bool = self.dt < now
 
     @classmethod
-    async def convert(cls, ctx: Context, argument: str):
-        return cls(argument, now=ctx.message.created_at)
+    async def convert(cls, ctx: Context, argument: str) -> Self:
+        tzinfo = datetime.timezone.utc
+        reminder = ctx.bot.reminder
+        if reminder is not None:
+            tzinfo = await reminder.get_tzinfo(ctx.author.id)
+        return cls(argument, now=ctx.message.created_at, tzinfo=tzinfo)
 
 
 class Time(HumanTime):
-    def __init__(self, argument: str, *, now: Optional[datetime.datetime] = None):
+    def __init__(
+        self,
+        argument: str,
+        *,
+        now: Optional[datetime.datetime] = None,
+        tzinfo: datetime.tzinfo = datetime.timezone.utc,
+    ):
         try:
-            o = ShortTime(argument, now=now)
-        except Exception as e:
-            super().__init__(argument)
+            o = ShortTime(argument, now=now, tzinfo=tzinfo)
+        except Exception:
+            super().__init__(argument, now=now, tzinfo=tzinfo)
         else:
             self.dt = o.dt
             self._past = False
 
 
+class BadTimeTransform(app_commands.AppCommandError):
+    pass
+
+
+class TimeTransformer(app_commands.Transformer):
+    async def transform(self, interaction, value: str) -> datetime.datetime:
+        tzinfo = datetime.timezone.utc
+        reminder = interaction.client.get_cog('Reminder')
+        if reminder is not None:
+            tzinfo = await reminder.get_tzinfo(interaction.user.id)
+
+        now = interaction.created_at.astimezone(tzinfo)
+        try:
+            short = ShortTime(value, now=now, tzinfo=tzinfo)
+        except commands.BadArgument:
+            try:
+                human = FutureTime(value, now=now, tzinfo=tzinfo)
+            except commands.BadArgument as e:
+                raise BadTimeTransform(str(e)) from None
+            else:
+                return human.dt
+        else:
+            return short.dt
+
+
 class FutureTime(Time):
-    def __init__(self, argument: str, *, now: Optional[datetime.datetime] = None):
-        super().__init__(argument, now=now)
+    def __init__(
+        self,
+        argument: str,
+        *,
+        now: Optional[datetime.datetime] = None,
+        tzinfo: datetime.tzinfo = datetime.timezone.utc,
+    ):
+        super().__init__(argument, now=now, tzinfo=tzinfo)
 
         if self._past:
             raise commands.BadArgument('this time is in the past')
@@ -120,89 +200,96 @@ class UserFriendlyTime(commands.Converter):
         self.default: Any = default
 
     async def convert(self, ctx: Context, argument: str) -> FriendlyTimeResult:
-        try:
-            calendar = HumanTime.calendar
-            regex = ShortTime.compiled
-            now = ctx.message.created_at
+        calendar = HumanTime.calendar
+        regex = ShortTime.compiled
+        now = ctx.message.created_at
 
-            match = regex.match(argument)
-            if match is not None and match.group(0):
-                data = {k: int(v) for k, v in match.groupdict(default=0).items()}
-                remaining = argument[match.end():].strip()
-                result = FriendlyTimeResult(now + relativedelta(**data))
+        reminder = ctx.bot.reminder
+        tzinfo = datetime.timezone.utc
+        if reminder is not None:
+            tzinfo = await reminder.get_tzinfo(ctx.author.id)
+
+        match = regex.match(argument)
+        if match is not None and match.group(0):
+            data = {k: int(v) for k, v in match.groupdict(default=0).items()}
+            remaining = argument[match.end() :].strip()
+            dt = now + relativedelta(**data)  # type: ignore
+            result = FriendlyTimeResult(dt.astimezone(tzinfo))
+            await result.ensure_constraints(ctx, self, now, remaining)
+            return result
+
+        if match is None or not match.group(0):
+            match = ShortTime.discord_fmt.match(argument)
+            if match is not None:
+                result = FriendlyTimeResult(
+                    datetime.datetime.fromtimestamp(int(match.group('ts')), tz=datetime.timezone.utc).astimezone(tzinfo)
+                )
+                remaining = argument[match.end() :].strip()
                 await result.ensure_constraints(ctx, self, now, remaining)
                 return result
 
-            # apparently nlp does not like "from now"
-            # it likes "from x" in other cases though so let me handle the 'now' case
-            if argument.endswith('from now'):
-                argument = argument[:-8].strip()
+        # apparently nlp does not like "from now"
+        # it likes "from x" in other cases though so let me handle the 'now' case
+        if argument.endswith('from now'):
+            argument = argument[:-8].strip()
 
-            if argument[0:2] == 'me':
-                # starts with "me to", "me in", or "me at "
-                if argument[0:6] in ('me to ', 'me in ', 'me at '):
-                    argument = argument[6:]
+        if argument[0:2] == 'me':
+            # starts with "me to", "me in", or "me at "
+            if argument[0:6] in ('me to ', 'me in ', 'me at '):
+                argument = argument[6:]
 
-            elements = calendar.nlp(argument, sourceTime=now)
-            if elements is None or len(elements) == 0:
-                raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
+        # Have to adjust the timezone so pdt knows how to handle things like "tomorrow at 6pm" in an aware way
+        now = now.astimezone(tzinfo)
+        elements = calendar.nlp(argument, sourceTime=now)
+        if elements is None or len(elements) == 0:
+            raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
 
-            # handle the following cases:
-            # "date time" foo
-            # date time foo
-            # foo date time
+        # handle the following cases:
+        # "date time" foo
+        # date time foo
+        # foo date time
 
-            # first the first two cases:
-            dt, status, begin, end, dt_string = elements[0]
+        # first the first two cases:
+        dt, status, begin, end, dt_string = elements[0]
 
-            if not status.hasDateOrTime:
-                raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
+        if not status.hasDateOrTime:
+            raise commands.BadArgument('Invalid time provided, try e.g. "tomorrow" or "3 days".')
 
-            if begin not in (0, 1) and end != len(argument):
-                raise commands.BadArgument(
-                    'Time is either in an inappropriate location, which '
-                    'must be either at the end or beginning of your input, '
-                    'or I just flat out did not understand what you meant. Sorry.'
-                )
+        if begin not in (0, 1) and end != len(argument):
+            raise commands.BadArgument(
+                'Time is either in an inappropriate location, which '
+                'must be either at the end or beginning of your input, '
+                'or I just flat out did not understand what you meant. Sorry.'
+            )
 
-            if not status.hasTime:
-                # replace it with the current time
-                dt = dt.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
+        if not status.hasTime:
+            # replace it with the current time
+            dt = dt.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
 
-            # if midnight is provided, just default to next day
-            if status.accuracy == pdt.pdtContext.ACU_HALFDAY:
-                dt = dt.replace(day=now.day + 1)
+        # if midnight is provided, just default to next day
+        if status.accuracy == pdt.pdtContext.ACU_HALFDAY:
+            dt = dt.replace(day=now.day + 1)
 
-            if ctx.bot.is_owner(ctx.author):
-                tz = datetime.timezone(offset=datetime.timedelta(hours=8))
+        result = FriendlyTimeResult(dt.replace(tzinfo=tzinfo))
+        remaining = ''
+
+        if begin in (0, 1):
+            if begin == 1:
+                # check if it's quoted:
+                if argument[0] != '"':
+                    raise commands.BadArgument('Expected quote before time input...')
+
+                if not (end < len(argument) and argument[end] == '"'):
+                    raise commands.BadArgument('If the time is quoted, you must unquote it.')
+
+                remaining = argument[end + 1 :].lstrip(' ,.!')
             else:
-                tz = datetime.timezone.utc
+                remaining = argument[end:].lstrip(' ,.!')
+        elif len(argument) == end:
+            remaining = argument[:begin].strip()
 
-            result = FriendlyTimeResult(dt.replace(tzinfo=tz))
-            remaining = ''
-
-            if begin in (0, 1):
-                if begin == 1:
-                    # check if it's quoted:
-                    if argument[0] != '"':
-                        raise commands.BadArgument('Expected quote before time input...')
-
-                    if not (end < len(argument) and argument[end] == '"'):
-                        raise commands.BadArgument('If the time is quoted, you must unquote it.')
-
-                    remaining = argument[end + 1:].lstrip(' ,.!')
-                else:
-                    remaining = argument[end:].lstrip(' ,.!')
-            elif len(argument) == end:
-                remaining = argument[:begin].strip()
-
-            await result.ensure_constraints(ctx, self, now, remaining)
-            return result
-        except:
-            import traceback
-
-            traceback.print_exc()
-            raise
+        await result.ensure_constraints(ctx, self, now, remaining)
+        return result
 
 
 def human_timedelta(
@@ -223,6 +310,10 @@ def human_timedelta(
     # Microsecond free zone
     now = now.replace(microsecond=0)
     dt = dt.replace(microsecond=0)
+
+    # Make sure they're both in the timezone
+    now = now.astimezone(datetime.timezone.utc)
+    dt = dt.astimezone(datetime.timezone.utc)
 
     # This implementation uses relativedelta instead of the much more obvious
     # divmod approach with seconds because the seconds approach is not entirely

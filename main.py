@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import asyncio
 import aiob2
 import mystbin
@@ -10,7 +11,7 @@ import pathlib
 from collections import Counter
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 import asyncpg
@@ -24,6 +25,9 @@ from utils.sonarr import Client as SonarrClient
 from cogs import EXTENSIONS
 from cogs.youtube import DownloadControls
 
+if TYPE_CHECKING:
+    from cogs.reminder import Reminder
+
 try:
     import uvloop
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
@@ -32,12 +36,15 @@ except Exception as e:
     logging.info(f'{Fore.RED} Failed to install uvloop.{Style.RESET_ALL}\n{e}')
     pass
 
+os.environ['JISHAKU_FORCE_PAGINATOR'] = 'True'
+os.environ['JISHAKU_NO_UNDERSCORE'] = 'True'
+os.environ['JISHAKU_NO_DM_TRACEBACK'] = 'True'
+os.environ['JISHAKU_HIDE'] = 'True'
+
 
 file_path = Path(__file__).resolve().parent / "config.toml"
 with open(file_path, "r") as file:
     config = toml.load(file)
-
-log = logging.getLogger("robo_dan")
 
 
 class RemoveNoise(logging.Filter):
@@ -48,6 +55,50 @@ class RemoveNoise(logging.Filter):
         if record.levelname == "WARNING" and "referencing an unknown" in record.msg:
             return False
         return True
+
+
+class ColourFormatter(logging.Formatter):
+
+    # ANSI codes are a bit weird to decipher if you're unfamiliar with them, so here's a refresher
+    # It starts off with a format like \x1b[XXXm where XXX is a semicolon separated list of commands
+    # The important ones here relate to colour.
+    # 30-37 are black, red, green, yellow, blue, magenta, cyan and white in that order
+    # 40-47 are the same except for the background
+    # 90-97 are the same but "bright" foreground
+    # 100-107 are the same as the bright ones but for the background.
+    # 1 means bold, 2 means dim, 0 means reset, and 4 means underline.
+
+    LEVEL_COLOURS = [
+        (logging.DEBUG, '\x1b[40;1m'),
+        (logging.INFO, '\x1b[32;1m'),
+        (logging.WARNING, '\x1b[33;1m'),
+        (logging.ERROR, '\x1b[31m'),
+        (logging.CRITICAL, '\x1b[41m'),
+    ]
+
+    FORMATS = {
+        level: logging.Formatter(
+            f'[\x1b[30;1m%(asctime)s\x1b[0m][ {colour}%(levelname)-8s\x1b[0m] \x1b[31m%(name)s\x1b[0m %(message)s',
+            '%Y-%m-%d %H:%M:%S',
+        )
+        for level, colour in LEVEL_COLOURS
+    }
+
+    def format(self, record):
+        formatter = self.FORMATS.get(record.levelno)
+        if formatter is None:
+            formatter = self.FORMATS[logging.DEBUG]
+
+        # Override the traceback to always print in red
+        if record.exc_info:
+            text = formatter.formatException(record.exc_info)
+            record.exc_text = f'\x1b[31m{text}\x1b[0m'
+
+        output = formatter.format(record)
+
+        # Remove the cache layer
+        record.exc_text = None
+        return output
 
 
 class SetupLogging:
@@ -65,18 +116,17 @@ class SetupLogging:
         logging.getLogger('utils.sonarr').setLevel(logging.DEBUG)
         logging.getLogger("discord.state").addFilter(RemoveNoise())
 
-
         self.log.setLevel(logging.INFO)
         handler = RotatingFileHandler(
             filename=self.logging_path / "bot.log", encoding="utf-8", mode="w", maxBytes=self.max_bytes, backupCount=5
         )
-        dt_fmt = "%Y-%m-%d %H:%M:%S"
-        fmt = logging.Formatter("[{asctime}] [{levelname:<7}] {name}: {message}", dt_fmt, style="{")
+        fmt = ColourFormatter()
         handler.setFormatter(fmt)
         self.log.addHandler(handler)
 
         if self.stream:
             stream_handler = logging.StreamHandler()
+            stream_handler.setFormatter(fmt)
             self.log.addHandler(stream_handler)
 
         return self
@@ -132,55 +182,6 @@ class Bot(commands.Bot):
         self.tree.interaction_check = self.interaction_check
         self.global_log = logging.getLogger()
 
-    @staticmethod
-    async def get_or_fetch_member(guild: discord.Guild, user_id: int) -> discord.Member | None:
-        """Looks up a member in cache or fetches if not found.
-        Parameters
-        -----------
-        guild: Guild
-            The guild to look in.
-        user_id: int
-            The user ID to search for.
-        Returns
-        ---------
-        Optional[discord.Member]
-            The member or None if not found.
-        """
-
-        member = guild.get_member(user_id)
-        if member is not None:
-            return member
-
-        try:
-            member = await guild.fetch_member(user_id)
-        except discord.HTTPException:
-            return None
-        else:
-            return member
-
-    async def get_or_fetch_user(self, user_id: int) -> discord.User | None:
-        """Looks up a user in cache or fetches if not found.
-        Parameters
-        -----------
-        user_id: int
-            The user ID to search for.
-        Returns
-        ---------
-        Optional[discord.User]
-            The member or None if not found.
-        """
-
-        user = self.get_user(user_id)
-        if user is not None:
-            return user
-
-        try:
-            user = await self.fetch_user(user_id)
-        except discord.HTTPException:
-            return None
-        else:
-            return user
-
     @discord.utils.cached_property
     def error_webhook(self):
         hook = discord.Webhook.partial(
@@ -189,6 +190,10 @@ class Bot(commands.Bot):
             session=self.session
         )
         return hook
+
+    @property
+    def reminder(self) -> Reminder | None:
+        return self.get_cog('Reminder')  # type: ignore
 
     async def ctx_check(self, ctx: Context) -> bool:
         return ctx.author.id == 723943620054614047
@@ -202,7 +207,7 @@ class Bot(commands.Bot):
     async def startup_message(self):
         await self.wait_until_ready()
 
-        log.info('Bot is ready with a populated cache')
+        self.global_log.info('Bot is ready with a populated cache')
 
     async def setup_hook(self) -> None:
         self.launch_time = datetime.datetime.utcnow()
@@ -237,11 +242,11 @@ async def main():
         bot.mystbin = mystbin.Client()
         bot.sonarr = SonarrClient(**config['sonarr'])
 
-        with SetupLogging(stream=False):
-            await bot.load_extension("jishaku")
-            for extension in EXTENSIONS:
-                await bot.load_extension(extension)
+        await bot.load_extension("jishaku")
+        for extension in EXTENSIONS:
+            await bot.load_extension(extension)
 
+        with SetupLogging(stream=False):
             asyncio.create_task(bot.startup_message())
 
             await bot.start()
