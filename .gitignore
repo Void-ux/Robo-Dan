@@ -1,3 +1,4 @@
+postgres/.env
 servarr/config/*
 config.toml
 
