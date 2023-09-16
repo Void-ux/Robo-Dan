@@ -4,7 +4,7 @@ import functools
 import os
 import uuid
 import time
-from urllib.parse import quote_plus as qp
+from urllib.parse import quote
 from typing import Literal, TYPE_CHECKING
 from pathlib import Path
 
@@ -23,21 +23,45 @@ if TYPE_CHECKING:
 def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> dict | None:
     path = Path(__file__).parent / 'downloads'
     ydl_opts = {
-        "format": "bv*+ba/b",
-        "outtmpl": {
-            "default": f'{str(path)}/{file_name}.%(ext)s'
+        'concurrent_fragment_downloads': 2,
+        'extract_flat': 'discard_in_playlist',
+        'final_ext': 'mkv',
+        'format': 'bv*+ba/b',
+        'fragment_retries': 10,
+        'ignoreerrors': 'only_download',
+        'merge_output_format': 'mkv',
+        'outtmpl': {
+            'default': f'{str(path)}/{file_name}.%(ext)s',
+            'pl_thumbnail': ''
         },
-        "overwrites": True,
-        "continuedl": False,
-        "verbose": True,
-        "merge_output_format": "mkv",
-        "final_ext": "mkv",
-        "postprocessors": [
+        'postprocessors': [
             {
-                "key": "FFmpegVideoRemuxer",
-                "preferedformat": "mkv"
+                'format': 'png',
+                'key': 'FFmpegThumbnailsConvertor',
+                'when': 'before_dl'
+            },
+            {
+                'key': 'FFmpegVideoRemuxer',
+                'preferedformat': 'mkv'
+            },
+            {
+                'add_chapters': True,
+                'add_infojson': True,
+                'add_metadata': True,
+                'key': 'FFmpegMetadata'
+            },
+            {
+                'already_have_thumbnail': False,
+                'key': 'EmbedThumbnail'
+            },
+            {
+                'key': 'FFmpegConcat',
+                'only_multi_video': True,
+                'when': 'playlist'
             }
-        ]
+        ],
+        'retries': 10,
+        'writethumbnail': True
     }
 
     if _format == 'all':
@@ -114,23 +138,28 @@ class YouTube(commands.Cog):
         start = time.perf_counter()
         info = await self.bot.loop.run_in_executor(None, partial)
         end = time.perf_counter()
-        assert info is not None
         download_time = end - start
+        if info is None:
+            title = uuid.uuid4()
+            ext = 'mkv'
+        else:
+            title = info['title']
+            ext = info['ext']
 
         file = [i for i in (Path(__file__).parent / 'downloads').iterdir() if i.name.startswith(uuid_)][0]
-        file_name = f"{info['title']}.{info['ext']}"
+        file_name = f"{title}.{ext}"
 
         # bots have a limit of 8mb per file
         try:
             if len(file.read_bytes()) <= 8_388_608:
                 await ctx.reply(
                     f'Took `{download_time:.2f}` seconds to download.',
-                    file=discord.File(fp=file, filename=f"{info['title']}.{info['ext']}")
+                    file=discord.File(fp=file, filename=file_name)
                 )
             else:
                 # avoid overwriting the OS file defined above
                 start = time.perf_counter()
-                _file = await self.bot.bucket.upload_file(
+                file_ = await self.bot.bucket.upload_file(
                     content_bytes=file.read_bytes(),
                     content_type='video/x-matroska',
                     file_name=f'downloads/{file_name}',
@@ -138,7 +167,7 @@ class YouTube(commands.Cog):
                 )
                 end = time.perf_counter()
                 upload_time = end - start
-                link = f'https://cdn.overseer.tech/file/imooog/downloads/{qp(file_name)}'
+                link = f'https://cdn.void-ux.com/file/imooog/downloads/{quote(file_name)}'
 
                 view = DownloadControls()
                 # we want to add the link here as passing it into the __init__ would cause problems
@@ -152,7 +181,7 @@ class YouTube(commands.Cog):
                 )
                 await self.bot.pool.execute(
                     'INSERT INTO files (message_id, file_name, file_id) VALUES ($1, $2, $3)',
-                    msg.id, _file.name, _file.id
+                    msg.id, file_.name, file_.id
                 )
         finally:
             os.remove(str(file))
