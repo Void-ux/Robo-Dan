@@ -1,6 +1,6 @@
 import discord
 
-from main import Bot
+from bot import Bot
 
 
 class Interaction(discord.Interaction):

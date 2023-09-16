@@ -22,7 +22,7 @@ from utils.interaction import Interaction
 from utils.models.sonarr import SeriesPayload, EpisodePayload, EpisodeFilePayload
 
 if TYPE_CHECKING:
-    from main import Bot
+    from bot import Bot
 
 log = logging.getLogger(__name__)
 

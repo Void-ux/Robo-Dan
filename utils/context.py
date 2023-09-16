@@ -6,7 +6,7 @@ from discord.ext import commands
 
 from .emotes import CROSS_EMOTE, CHECK_EMOTE
 if TYPE_CHECKING:
-    from main import Bot
+    from bot import Bot
 
 T = TypeVar('T')
 
