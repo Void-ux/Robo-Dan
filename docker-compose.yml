@@ -5,21 +5,12 @@ services:
     container_name: rdan_db
     # Can be shortened with ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     build: ./postgres
-    ports:
-      - 5432:5432
     env_file:
       - ./postgres/.env
     volumes:
       - type: volume
         source: rdan-db
         target: /var/lib/postgresql/data
-
-  #lavalink:
-  #  container_name: rdan_lavalink
-  #  restart: always
-  #  image: fredboat/lavalink:master
-  #  volumes:
-  #    - ./application.yml:/opt/Lavalink/application.yml
 
   sonarr:
     restart: unless-stopped
