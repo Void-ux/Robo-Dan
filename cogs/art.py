@@ -1,4 +1,3 @@
-import datetime
 import functools
 import time
 from io import BytesIO
@@ -13,12 +12,12 @@ from utils.context import Context
 
 
 def overlay_text(
-        img: Any,
-        text: str,
-        _format: str = 'jpeg',
-        font_size: int = 140,
-        coordinates: tuple[int, int] = (0, 0),
-        colour: tuple[int, int, int] = (0, 0, 0)
+    img: Any,
+    text: str,
+    _format: str = 'jpeg',
+    font_size: int = 140,
+    coordinates: tuple[int, int] = (0, 0),
+    colour: tuple[int, int, int] = (0, 0, 0)
 ) -> BytesIO:
     font = ImageFont.truetype('arial.ttf', font_size)
     draw = ImageDraw.Draw(img)
@@ -37,13 +36,13 @@ class Art(commands.Cog):
 
     @commands.hybrid_command()
     async def overlay(
-            self,
-            ctx: Context,
-            x: int,
-            y: int,
-            *,
-            text: str,
-            attachment: Annotated[discord.Attachment | discord.Asset | None, discord.Attachment | None] = None
+        self,
+        ctx: Context,
+        x: int,
+        y: int,
+        *,
+        text: str,
+        attachment: Annotated[discord.Attachment | discord.Asset | None, discord.Attachment | None] = None
     ):
         if not ctx.interaction:
             if ctx.message.attachments:
