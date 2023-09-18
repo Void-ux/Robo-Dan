@@ -23,7 +23,7 @@ services:
       - PUID=1000
       - PGID=1000
     ports:
-      - 28600:8989
+      - 127.0.0.1:28600:8989
 
   sabnzbd:
     restart: unless-stopped
@@ -36,9 +36,7 @@ services:
       - /home/dan/robo-dan/servarr/config/sabnzbd:/config
       - /home/dan/robo-dan/servarr/data/usenet:/data/usenet
     ports:
-      - 28700:8080
-    expose:
-      - 8080
+      - 127.0.0.1:28700:8080
 
   bot:
     restart: unless-stopped
