@@ -230,7 +230,7 @@ async def get_rotten_tomatoes_rating(series_name: str, session: aiohttp.ClientSe
     async with session.get(f'https://rottentomatoes.com/tv/{series_name}') as response:
         content = await response.text()
 
-    soup = BeautifulSoup(content, features='html5lib')
+    soup = BeautifulSoup(content, features='lxml')
     tomatometer = soup.find('span', {'data-qa': 'tomatometer'})
     audience_score = soup.find('span', {'data-qa': 'audience-score'})
     if tomatometer is not None and audience_score is not None:
@@ -314,7 +314,7 @@ class Sonarr(commands.Cog):
         m = await ctx.send(embed=e)
 
         try:
-            task = await asyncio.wait_for(monitor_download(ctx, episode), timeout=600)
+            task = await asyncio.wait_for(monitor_download(ctx, episode), timeout=900)
         except asyncio.TimeoutError:
             e.description = "Downloading episode(s) timed out, this is most likely because the requested quality and language couldn't be found"
             e.colour = 0xDB515A
@@ -354,6 +354,7 @@ class Sonarr(commands.Cog):
             e.add_field(name='Size', value=humanize.naturalsize(episode_file['size']))
 
             await m.edit(embed=e)
+            await self.bot.sonarr.delete_episode(await self.bot.sonarr.get_episode_file(episode['id']))
 
 
     @commands.hybrid_command(aliases=['dl'])
