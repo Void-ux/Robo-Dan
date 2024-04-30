@@ -17,7 +17,7 @@ import psutil
 from discord import app_commands
 from discord.ext import commands, tasks
 
-from bot import Bot
+from bot import RoboDan
 from utils import formats
 from utils.context import GuildContext
 from utils.emotes import LEADERBOARD_EMOTES
@@ -69,7 +69,7 @@ def object_at(addr: int) -> Any | None:
 class Stats(commands.Cog):
     """Bot usage statistics."""
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: RoboDan):
         self.bot = bot
         self.process = psutil.Process()
         self._batch_lock = asyncio.Lock()
@@ -876,7 +876,7 @@ class Stats(commands.Cog):
         await ctx.send(f'```\n{render}\n```')
 
 
-async def setup(bot: Bot):
+async def setup(bot: RoboDan):
     if not hasattr(bot, 'command_stats'):
         bot.command_stats = Counter()
 

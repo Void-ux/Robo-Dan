@@ -22,7 +22,7 @@ from utils.interaction import Interaction
 from utils.models.sonarr import SeriesPayload, EpisodePayload, EpisodeFilePayload
 
 if TYPE_CHECKING:
-    from bot import Bot
+    from bot import RoboDan
 
 log = logging.getLogger(__name__)
 
@@ -100,7 +100,7 @@ class SeriesSelector(discord.ui.Select):
 
 
 class DownloadPanel(discord.ui.View):
-    def __init__(self, tv_shows: list[SeriesPayload], author_id: int, *, bot: Bot):
+    def __init__(self, tv_shows: list[SeriesPayload], author_id: int, *, bot: RoboDan):
         super().__init__(timeout=60)
         self.add_item(SeriesSelector(tv_shows))
 
@@ -281,7 +281,7 @@ async def series_embed(series: SeriesPayload, session: aiohttp.ClientSession) ->
 
 
 class Sonarr(commands.Cog):
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: RoboDan):
         self.bot = bot
 
     async def get_imdb_rating(self, imdb_id: str) -> float | None:
@@ -462,5 +462,5 @@ class Sonarr(commands.Cog):
                 await self.monitor_episode(episode, ctx)
 
 
-async def setup(bot: Bot):
+async def setup(bot: RoboDan):
     await bot.add_cog(Sonarr(bot))
