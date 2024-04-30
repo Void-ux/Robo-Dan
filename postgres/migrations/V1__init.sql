@@ -1,3 +1,7 @@
+-- Revises: V0
+-- Creation Date: 2024-02-20 14:20:25.168931 UTC
+-- Reason: init
+
 CREATE TABLE IF NOT EXISTS reminders
 (
     id      BIGINT    GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -7,12 +11,8 @@ CREATE TABLE IF NOT EXISTS reminders
     extra   JSONB     DEFAULT '{}'::JSONB
 );
 
-CREATE INDEX ON reminders (expires);
---
--- Misc
---
+CREATE INDEX IF NOT EXISTS reminders_id_idx ON reminders (expires);
 
--- Every command ever invoked is added here, currently only supports on_command_completion (not app commands)
 CREATE TABLE IF NOT EXISTS commands
 (
     id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -32,11 +32,12 @@ CREATE TABLE IF NOT EXISTS files
     message_id BIGINT PRIMARY KEY,
     file_name  TEXT NOT NULL,
     file_id    TEXT NOT NULL
-)
+);
 
-CREATE TABLE IF NOT EXISTS user_settings (
+CREATE TABLE IF NOT EXISTS user_settings
+(
     id BIGINT PRIMARY KEY, -- The discord user ID
     timezone TEXT -- The user's timezone
 );
 
-ALTER TABLE reminders ADD COLUMN timezone TEXT NOT NULL DEFAULT 'UTC';
+ALTER TABLE reminders ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC';
