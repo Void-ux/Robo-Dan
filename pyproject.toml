@@ -6,7 +6,6 @@ authors = ["Void-ux <daniel.grant2017@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-"discord.py" = {extras = ["speed"], version = "^2.0.1"}
 Pillow = "^9.2.0"
 toml = "^0.10.2"
 aiohttp = {extras = ["speed"], version = "^3.8.1"}
@@ -17,7 +16,7 @@ python-dateutil = "^2.8.2"
 parsedatetime = "^2.6"
 jishaku = "^2.5.1"
 yt-dlp = "^2023.3.3"
-mystbin-py = "^5.0.2"
+mystbin-py = "^6.0.2"
 orjson = "^3.8.0"
 uvloop = { version = "^0.17.0", markers = "sys_platform == 'linux'" }
 humanize = "^4.3.0"
@@ -27,6 +26,10 @@ pytz = "^2023.3.post1"
 line-profiler = "^4.1.1"
 lru-dict = "^1.2.0"
 lxml = "^4.9.3"
+torch = ">=2.0.0, !=2.0.1, !=2.1.0"
+openai-whisper = {git = "https://github.com/openai/whisper.git"}
+discord-ext-voice-recv = "^0.4.2a145"
+discord-py = {git = "https://github.com/Rapptz/discord.py"}
 
 [tool.poetry.dev-dependencies]
 
@@ -37,7 +40,7 @@ isort = "^5.11.4"
 venvPath = "/home/dan/.cache/pypoetry/virtualenvs"
 venv = "robo_dan-xAwpTgwo-py3.11"
 typeCheckingVersion = "off"
-pythonVersion = "3.10"
+pythonVersion = "3.11"
 reportUnusedImport = "error"
 reportUnnecessaryTypeIgnoreComment = "error"
 
