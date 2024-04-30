@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 import os
 import uuid
 import time
@@ -16,7 +15,7 @@ from discord.ext import commands
 from utils import affirmation_embed
 from utils.context import GuildContext
 if TYPE_CHECKING:
-    from bot import Bot
+    from bot import RoboDan
     from utils.interaction import Interaction
 
 
@@ -107,7 +106,7 @@ class DownloadControls(discord.ui.View):
 
 
 class YouTube(commands.Cog):
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: RoboDan):
         self.bot = bot
 
     @commands.hybrid_command(aliases=['yt'])
@@ -131,12 +130,8 @@ class YouTube(commands.Cog):
         await ctx.typing()
         uuid_ = str(uuid.uuid4())
 
-        # We use partial to make the code look cleaner, even though we
-        # could technically pass it in to run_in_executor
-        partial = functools.partial(download, query, uuid_, _format)
-
         start = time.perf_counter()
-        info = await self.bot.loop.run_in_executor(None, partial)
+        info = await self.bot.loop.run_in_executor(None, download, query, uuid_, _format)
         end = time.perf_counter()
         download_time = end - start
         if info is None:
@@ -187,5 +182,5 @@ class YouTube(commands.Cog):
             os.remove(str(file))
 
 
-async def setup(bot: Bot):
+async def setup(bot: RoboDan):
     await bot.add_cog(YouTube(bot))

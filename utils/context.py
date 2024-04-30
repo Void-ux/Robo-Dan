@@ -6,7 +6,7 @@ from discord.ext import commands
 
 from .emotes import CROSS_EMOTE, CHECK_EMOTE
 if TYPE_CHECKING:
-    from bot import Bot
+    from bot import RoboDan
 
 T = TypeVar('T')
 
@@ -97,7 +97,7 @@ class DisambiguatorView(discord.ui.View, Generic[T]):
 
 
 class Context(commands.Context):
-    bot: Bot
+    bot: RoboDan
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -6,7 +6,7 @@ from typing import Any
 import discord
 from discord.ext import commands
 
-from bot import Bot
+from bot import RoboDan
 from utils import error_embed
 from utils.context import Context
 
@@ -58,7 +58,7 @@ def get_help(command):
 
 
 class ErrorHandler(commands.Cog):
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: RoboDan):
         self.bot = bot
         bot.on_error = self.on_error
 

@@ -14,7 +14,7 @@ from discord import app_commands
 from discord.ext import commands
 from lxml import etree
 
-from bot import Bot
+from bot import RoboDan
 from utils import time, formats, db, cache, fuzzy, error_embed
 from utils.context import Context, GuildContext
 from cogs.error_handler import get_help
@@ -216,7 +216,7 @@ class Reminder(commands.Cog):
     )
 
     def __init__(self, bot):
-        self.bot: Bot = bot
+        self.bot: RoboDan = bot
         self._have_data = asyncio.Event()
         self._current_timer: Timer | None = None
         self._task = bot.loop.create_task(self.dispatch_timers())

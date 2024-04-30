@@ -7,13 +7,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from bot import Bot
+from bot import RoboDan
 from utils import formats
 from utils.context import GuildContext
 
 
 class Developer(commands.Cog):
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: RoboDan):
         self.bot = bot
 
     @commands.hybrid_command()
@@ -129,5 +129,5 @@ class Developer(commands.Cog):
             await ctx.send('\N{OK HAND SIGN}')
 
 
-async def setup(bot: Bot):
+async def setup(bot: RoboDan):
     await bot.add_cog(Developer(bot))

@@ -1,7 +1,7 @@
 import discord
 
-from bot import Bot
+from bot import RoboDan
 
 
 class Interaction(discord.Interaction):
-    client: Bot
+    client: RoboDan
