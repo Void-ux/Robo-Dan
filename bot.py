@@ -52,7 +52,7 @@ class Config(TypedDict):
     error: WebhookConfig
 
 
-class Bot(commands.Bot):
+class RoboDan(commands.Bot):
     pool: asyncpg.Pool
     session: aiohttp.ClientSession
     bucket: aiob2.Client
@@ -74,7 +74,7 @@ class Bot(commands.Bot):
         self.add_check(self.ctx_check)
         self.add_view(DownloadControls())
         self.tree.interaction_check = self.interaction_check
-        self.global_log = logging.getLogger()
+        self.global_log = logging.getLogger('robodan')
 
     @discord.utils.cached_property
     def error_webhook(self):
@@ -106,11 +106,8 @@ class Bot(commands.Bot):
     async def setup_hook(self) -> None:
         self.launch_time = datetime.datetime.utcnow()
 
-    async def start(self, token: str, *, reconnect: bool = True) -> None:
-        await super().start(
-            token,
-            reconnect=reconnect
-        )
+    async def start(self, *, reconnect: bool = True) -> None:
+        await super().start(self.config['token'], reconnect=reconnect)
 
     async def close(self) -> None:
         await super().close()

@@ -1,6 +1,10 @@
 postgres/.env
 servarr/config/*
 config.toml
+logs/
+*.json
+*.ttf
+
 
 .vscode
 *.sublime-project
