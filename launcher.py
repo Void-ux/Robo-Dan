@@ -33,6 +33,7 @@ except Exception:
 else:
     asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
+discord.opus._load_default()
 
 os.environ['JISHAKU_FORCE_PAGINATOR'] = "True"
 os.environ['JISHAKU_NO_UNDERSCORE'] = "True"
