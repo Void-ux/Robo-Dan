@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, IO
+import tempfile
+from io import BytesIO
+from typing import TYPE_CHECKING
 
 import discord
 import wave
@@ -17,9 +19,13 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-def transcribe(file: str, model_name: str):
+def transcribe(buff: BytesIO, model_name: str):
     model = whisper.load_model(model_name)
-    return whisper.transcribe(model, file, language='English', fp16=False)
+    with tempfile.NamedTemporaryFile('wb+') as file:
+        buff.seek(0)
+        file.write(buff.read())
+        file.seek(0)
+        return whisper.transcribe(model, file.name, language='English', fp16=False)
 
 
 class DummySink(AudioSink):
@@ -48,37 +54,43 @@ class RotatingWaveSink(SilenceGeneratorSink):
     SAMPLE_WIDTH = OpusDecoder.SAMPLE_SIZE // OpusDecoder.CHANNELS
     SAMPLING_RATE = OpusDecoder.SAMPLING_RATE
 
-    def __init__(self, bot: RoboDan):
+    def __init__(self, bot: RoboDan, recorder: discord.Member):
         super().__init__(DummySink())
         self.bot = bot
+        self.recorder = recorder
 
-        self._file = self._create_file('0_audio')
+        self._wave_file = self._create_file()
         self._file_count: int = 1
 
     def wants_opus(self) -> bool:
         return False
 
-    def _create_file(self, name: str) -> wave.Wave_write:
-        file = wave.open(name, 'wb')
+    def _create_file(self) -> wave.Wave_write:
+        self._file = BytesIO()
+
+        file = wave.open(self._file, 'wb')
         file.setnchannels(self.CHANNELS)
         file.setsampwidth(self.SAMPLE_WIDTH)
         file.setframerate(self.SAMPLING_RATE)
+
         return file
 
     def write(self, user: discord.User | None, data: VoiceData):
         super().write(user, data)
-        if self._file.getnframes() / self._file.getframerate() >= 8:
-            # 10 secs
-            self._file.close()
-            self.bot.dispatch('transcript_complete', f'{self._file_count}_audio')
-            self._file = self._create_file(f'{self._file_count}_audio')
+        if self._wave_file.getnframes() / self._wave_file.getframerate() >= 8:
+            # 8 secs
+            self._wave_file.close()
+            file_name = f'{self.recorder.voice.channel.name}_transcript_{self._file_count}'  # type: ignore
+            self.bot.dispatch('transcript_complete', self.recorder, self._file, file_name)
+            self._wave_file = self._create_file()
             self._file_count += 1
-        self._file.writeframes(data.pcm)
+
+        self._wave_file.writeframes(data.pcm)
 
     def cleanup(self):
         super().cleanup()
         try:
-            self._file.close()
+            self._wave_file.close()
         except Exception:
             log.info("WaveSink got error closing file on cleanup", exc_info=True)
 
@@ -94,7 +106,7 @@ class STT(commands.Cog):
         assert ctx.author.voice.channel is not None
 
         vc = await ctx.author.voice.channel.connect(cls=voice_recv.VoiceRecvClient)
-        vc.listen(RotatingWaveSink(self.bot))
+        vc.listen(RotatingWaveSink(self.bot, ctx.author))
 
     @commands.hybrid_command(aliases=['dc'])
     async def disconnect(self, ctx: GuildContext):
@@ -102,23 +114,15 @@ class STT(commands.Cog):
             return await ctx.send("I'm not recording anything in any VCs at the moment.")
 
         await ctx.voice_client.disconnect(force=False)
-        # transcript = await self.bot.loop.run_in_executor(None, transcribe, '0_audio.wav', 'medium.en')
-        # await ctx.send(transcript)  # type: ignore
-
-    @commands.hybrid_command()
-    async def test(self, ctx: GuildContext):
-        transcript = await self.bot.loop.run_in_executor(None, transcribe, '0_audio.wav', 'small.en')
-        await ctx.send(transcript)  # type: ignore
 
     @commands.Cog.listener()
-    async def on_transcript_complete(self, file: str):
-        with open(file, 'rb') as file_:
-           size = len(file_.read())
-        transcript = await self.bot.loop.run_in_executor(None, transcribe, file, 'small.en')
-        await self.bot.get_channel(1016137096316063844).send(f'Transcript of {file} produced:```{transcript}```')  # type: ignore
-        with open(file, 'rb') as file_:
-           size2 = len(file_.read())
-           # print(size, size2, (size2-size)/size, f'diff = {size2-size}')
+    async def on_transcript_complete(self, recorder: discord.Member, buff: BytesIO, file_name: str):
+        transcript = await self.bot.loop.run_in_executor(None, transcribe, buff, 'small.en')
+        try:
+            await recorder.send(f'Transcript of {file_name} produced:```{transcript}```')
+        except discord.Forbidden:
+            return
+
 
 async def setup(bot: RoboDan):
     await bot.add_cog(STT(bot))
