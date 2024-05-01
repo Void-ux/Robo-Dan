@@ -3,7 +3,6 @@ services:
   db:
     restart: unless-stopped
     container_name: rdan_db
-    # Can be shortened with ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       - 127.0.0.1:32400:5432
     image: library/postgres:14.2
