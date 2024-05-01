@@ -94,12 +94,12 @@ class RotatingWaveSink(SilenceGeneratorSink):
     @AudioSink.listener()
     def on_voice_member_disconnect(self, member: discord.Member, ssrc: int | None):
         self._generate_transcript()
-        del self._wave_file
 
     def cleanup(self):
         super().cleanup()
         try:
             self._wave_file.close()
+            del self._wave_file
         except Exception:
             log.info("WaveSink got error closing file on cleanup", exc_info=True)
 
@@ -115,6 +115,7 @@ class STT(commands.Cog):
         assert ctx.author.voice.channel is not None
 
         vc = await ctx.author.voice.channel.connect(cls=voice_recv.VoiceRecvClient)
+        await ctx.send(f'Alright {ctx.author.mention}, started listening in {ctx.author.voice.channel.mention}')
         vc.listen(RotatingWaveSink(self.bot, ctx.author, ctx.author.voice.channel))
 
     @commands.hybrid_command(aliases=['dc'])
@@ -122,7 +123,9 @@ class STT(commands.Cog):
         if not ctx.voice_client:
             return await ctx.send("I'm not recording anything in any VCs at the moment.")
 
+        ch = ctx.voice_client.channel.mention  # type: ignore
         await ctx.voice_client.disconnect(force=False)
+        await ctx.send(f'Alright {ctx.author.mention}, stopped listening in {ch}')
 
     @commands.Cog.listener()
     async def on_transcript_complete(self, recorder: discord.Member, buff: BytesIO, file_name: str):
