@@ -54,10 +54,11 @@ class RotatingWaveSink(SilenceGeneratorSink):
     SAMPLE_WIDTH = OpusDecoder.SAMPLE_SIZE // OpusDecoder.CHANNELS
     SAMPLING_RATE = OpusDecoder.SAMPLING_RATE
 
-    def __init__(self, bot: RoboDan, recorder: discord.Member):
+    def __init__(self, bot: RoboDan, recorder: discord.Member, channel: discord.VoiceChannel | discord.StageChannel):
         super().__init__(DummySink())
         self.bot = bot
         self.recorder = recorder
+        self.channel = channel
 
         self._wave_file = self._create_file()
         self._file_count: int = 1
@@ -75,17 +76,25 @@ class RotatingWaveSink(SilenceGeneratorSink):
 
         return file
 
+    def _generate_transcript(self) -> None:
+        self._wave_file.close()
+        file_name = f'{self.channel.name}_transcript_{self._file_count}'
+        self.bot.dispatch('transcript_complete', self.recorder, self._file, file_name)
+
     def write(self, user: discord.User | None, data: VoiceData):
         super().write(user, data)
         if self._wave_file.getnframes() / self._wave_file.getframerate() >= 8:
             # 8 secs
-            self._wave_file.close()
-            file_name = f'{self.recorder.voice.channel.name}_transcript_{self._file_count}'  # type: ignore
-            self.bot.dispatch('transcript_complete', self.recorder, self._file, file_name)
+            self._generate_transcript()
             self._wave_file = self._create_file()
             self._file_count += 1
 
         self._wave_file.writeframes(data.pcm)
+
+    @AudioSink.listener()
+    def on_voice_member_disconnect(self, member: discord.Member, ssrc: int | None):
+        self._generate_transcript()
+        del self._wave_file
 
     def cleanup(self):
         super().cleanup()
@@ -106,7 +115,7 @@ class STT(commands.Cog):
         assert ctx.author.voice.channel is not None
 
         vc = await ctx.author.voice.channel.connect(cls=voice_recv.VoiceRecvClient)
-        vc.listen(RotatingWaveSink(self.bot, ctx.author))
+        vc.listen(RotatingWaveSink(self.bot, ctx.author, ctx.author.voice.channel))
 
     @commands.hybrid_command(aliases=['dc'])
     async def disconnect(self, ctx: GuildContext):
@@ -119,7 +128,7 @@ class STT(commands.Cog):
     async def on_transcript_complete(self, recorder: discord.Member, buff: BytesIO, file_name: str):
         transcript = await self.bot.loop.run_in_executor(None, transcribe, buff, 'small.en')
         try:
-            await recorder.send(f'Transcript of {file_name} produced:```{transcript}```')
+            await recorder.send(f"Transcript of {file_name} produced:```{transcript['text']}```")
         except discord.Forbidden:
             return
 
