@@ -4,9 +4,10 @@ import os
 import uuid
 import time
 from urllib.parse import quote
-from typing import Literal, TYPE_CHECKING
+from typing import Literal, TYPE_CHECKING, TypedDict
 from pathlib import Path
 
+from aiob2 import File
 import discord
 import yt_dlp
 from discord import app_commands
@@ -19,7 +20,12 @@ if TYPE_CHECKING:
     from utils.interaction import Interaction
 
 
-def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> dict | None:
+class DownloadRef(TypedDict):
+    title: str
+    ext: str
+
+
+def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> DownloadRef:
     path = Path(__file__).parent / 'downloads'
     ydl_opts = {
         'concurrent_fragment_downloads': 2,
@@ -79,7 +85,10 @@ def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> dict
         info = ydl.extract_info(url)
         ydl.download([url])
 
-    return info
+    return info or {
+        'title': file_name,
+        'ext': 'mkv'
+    }  # type: ignore
 
 
 class DownloadControls(discord.ui.View):
@@ -91,9 +100,12 @@ class DownloadControls(discord.ui.View):
         query = """SELECT file_name, file_id FROM files
                    WHERE message_id=$1
                 """
-        file_name, file_id = await interaction.client.pool.fetchrow(query, interaction.message.id)  # type: ignore
+        row = await interaction.client.pool.fetchrow(query, interaction.message.id)  # type: ignore
 
-        await interaction.client.bucket.delete_file(file_name, file_id)
+        if row is None:
+            return await interaction.response.send_message('Sorry, there is no record of this media being stored')
+
+        await interaction.client.bucket.delete_file(*row)
 
         button.disabled = True
         await interaction.message.edit(view=self)  # type: ignore
@@ -109,16 +121,25 @@ class YouTube(commands.Cog):
     def __init__(self, bot: RoboDan):
         self.bot = bot
 
-    @commands.hybrid_command(aliases=['yt'])
-    @commands.is_owner()
-    @app_commands.rename(_format='format')
+    async def _store_file_ref(self, message_id: int, file: File) -> None:
+        await self.bot.pool.execute(
+            'INSERT INTO files (message_id, file_name, file_id) VALUES ($1, $2, $3)',
+            message_id, file.name, file.id
+        )
+
+    @commands.hybrid_group(invoke_without_command=True, aliases=['yt'])
+    async def youtube(self, ctx: GuildContext):
+        pass
+
+    @youtube.command(aliases=['dl'])
+    @app_commands.rename(format='format')
     @app_commands.choices(
-        _format=[
+        format=[
             app_commands.Choice(name='Audio and Video', value='all'),
             app_commands.Choice(name='Audio', value='audio')
         ]
     )
-    async def yt_download(self, ctx: GuildContext, query: str, _format: Literal['audio', 'all'] = 'all'):
+    async def youtube_download(self, ctx: GuildContext, url: str, format: Literal['audio', 'all'] = 'all'):
         """
         Downloads a video from one of thousands of hosts online such as YouTube, Reddit, TikTok, etc.
 
@@ -131,18 +152,12 @@ class YouTube(commands.Cog):
         uuid_ = str(uuid.uuid4())
 
         start = time.perf_counter()
-        info = await self.bot.loop.run_in_executor(None, download, query, uuid_, _format)
+        info = await self.bot.loop.run_in_executor(None, download, url, uuid_, format)
         end = time.perf_counter()
         download_time = end - start
-        if info is None:
-            title = uuid.uuid4()
-            ext = 'mkv'
-        else:
-            title = info['title']
-            ext = info['ext']
 
         file = [i for i in (Path(__file__).parent / 'downloads').iterdir() if i.name.startswith(uuid_)][0]
-        file_name = f"{title}.{ext}"
+        file_name = f"{info['title']}.{info['ext']}"
 
         # bots have a limit of 8mb per file
         try:
@@ -165,8 +180,6 @@ class YouTube(commands.Cog):
                 link = f'https://cdn.void-ux.com/file/imooog/downloads/{quote(file_name)}'
 
                 view = DownloadControls()
-                # we want to add the link here as passing it into the __init__ would cause problems
-                # with bot.add_view in main.py
                 view.add_item(discord.ui.Button(label='Go to video', url=link))
 
                 msg = await ctx.reply(
@@ -174,10 +187,7 @@ class YouTube(commands.Cog):
                     f"If there's no video embed below, click the URL to view it in your browser.\n{link}",
                     view=view
                 )
-                await self.bot.pool.execute(
-                    'INSERT INTO files (message_id, file_name, file_id) VALUES ($1, $2, $3)',
-                    msg.id, file_.name, file_.id
-                )
+                await self._store_file_ref(msg.id, file_)
         finally:
             os.remove(str(file))
 
