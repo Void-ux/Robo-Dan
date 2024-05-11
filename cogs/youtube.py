@@ -53,7 +53,7 @@ def download(url: str, file_name: str, format: MediaFormat):
             },
             {
                 'add_chapters': True,
-                'add_infojson': True,
+                'add_infojson': False,
                 'add_metadata': True,
                 'key': 'FFmpegMetadata'
             },
@@ -173,10 +173,9 @@ class YouTube(commands.Cog):
             else:
                 # avoid overwriting the OS file defined above
                 start = time.perf_counter()
-                file_ = await self.bot.bucket.upload_file(
-                    content_bytes=file.read_bytes(),
+                file_ = await self.bot.bucket.upload_large_file(
+                    file_name=file.name,
                     content_type='video/x-matroska',
-                    file_name=f'downloads/{file_name}',
                     bucket_id=self.bot.config['backblaze']['bucket_id'],
                 )
                 end = time.perf_counter()
