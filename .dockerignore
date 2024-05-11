@@ -1,1 +1,5 @@
-servarr
+servarr/
+.venv/
+__pycache__/
+devscripts/
+logs/
