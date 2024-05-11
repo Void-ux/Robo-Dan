@@ -7,7 +7,7 @@ from urllib.parse import quote
 from typing import TYPE_CHECKING
 from pathlib import Path
 
-from aiob2 import File
+from aiob2 import File, LargeFile
 import discord
 import yt_dlp
 from discord import app_commands
@@ -124,7 +124,7 @@ class YouTube(commands.Cog):
     def __init__(self, bot: RoboDan):
         self.bot = bot
 
-    async def _store_file_ref(self, message_id: int, file: File) -> None:
+    async def _store_file_ref(self, message_id: int, file: File | LargeFile) -> None:
         await self.bot.pool.execute(
             'INSERT INTO files (message_id, file_name, file_id) VALUES ($1, $2, $3)',
             message_id, file.name, file.id
