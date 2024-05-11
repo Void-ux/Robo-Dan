@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os
+import enum
 import uuid
 import time
 from urllib.parse import quote
-from typing import Literal, TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING
 from pathlib import Path
 
 from aiob2 import File
@@ -12,6 +12,7 @@ import discord
 import yt_dlp
 from discord import app_commands
 from discord.ext import commands
+from jishaku.functools import executor_function
 
 from utils import affirmation_embed
 from utils.context import GuildContext
@@ -20,21 +21,22 @@ if TYPE_CHECKING:
     from utils.interaction import Interaction
 
 
-class DownloadRef(TypedDict):
-    title: str
-    ext: str
+class MediaFormat(str, enum.Enum):
+    AUDIO = 'Audio'
+    VIDEO = 'Audio and Video'
 
 
-def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> DownloadRef:
+@executor_function
+def download(url: str, file_name: str, format: MediaFormat):
     path = Path(__file__).parent / 'downloads'
     ydl_opts = {
         'concurrent_fragment_downloads': 2,
         'extract_flat': 'discard_in_playlist',
-        'final_ext': 'mkv',
+        'final_ext': 'mp4',
         'format': 'bv*+ba/b',
         'fragment_retries': 10,
         'ignoreerrors': 'only_download',
-        'merge_output_format': 'mkv',
+        'merge_output_format': 'mp4',
         'outtmpl': {
             'default': f'{str(path)}/{file_name}.%(ext)s',
             'pl_thumbnail': ''
@@ -47,7 +49,7 @@ def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> Down
             },
             {
                 'key': 'FFmpegVideoRemuxer',
-                'preferedformat': 'mkv'
+                'preferedformat': 'mp4'
             },
             {
                 'add_chapters': True,
@@ -69,12 +71,12 @@ def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> Down
         'writethumbnail': True
     }
 
-    if _format == 'all':
+    if format == MediaFormat.VIDEO:
         # Download best format that contains video,
         # and if it doesn't already have an audio stream,
         # merge it with best audio-only format
         ydl_opts['format'] = 'bv*+ba/b'
-    elif _format == 'audio':
+    elif format == MediaFormat.AUDIO:
         ydl_opts['format'] = 'bestaudio/best'
         ydl_opts['prefer_ffmpg'] = True
         ydl_opts['postprocessors'] = [{
@@ -85,10 +87,11 @@ def download(url: str, file_name: str, _format: Literal['audio', 'all']) -> Down
         info = ydl.extract_info(url)
         ydl.download([url])
 
-    return info or {
-        'title': file_name,
-        'ext': 'mkv'
-    }  # type: ignore
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url)
+        ydl.download([url])
+
+    return info
 
 
 class DownloadControls(discord.ui.View):
@@ -131,15 +134,9 @@ class YouTube(commands.Cog):
     async def youtube(self, ctx: GuildContext):
         pass
 
-    @youtube.command(aliases=['dl'])
+    @youtube.command(name='download', aliases=['dl'])
     @app_commands.rename(format='format')
-    @app_commands.choices(
-        format=[
-            app_commands.Choice(name='Audio and Video', value='all'),
-            app_commands.Choice(name='Audio', value='audio')
-        ]
-    )
-    async def youtube_download(self, ctx: GuildContext, url: str, format: Literal['audio', 'all'] = 'all'):
+    async def youtube_download(self, ctx: GuildContext, url: str, format: MediaFormat = MediaFormat.VIDEO):
         """
         Downloads a video from one of thousands of hosts online such as YouTube, Reddit, TikTok, etc.
 
@@ -152,12 +149,19 @@ class YouTube(commands.Cog):
         uuid_ = str(uuid.uuid4())
 
         start = time.perf_counter()
-        info = await self.bot.loop.run_in_executor(None, download, url, uuid_, format)
+        info = await download(url, uuid_, format)
         end = time.perf_counter()
         download_time = end - start
 
+        if info is None:
+            title = uuid.uuid4()
+            ext = 'mp4'
+        else:
+            title = info['title']
+            ext = info['ext']
+
         file = [i for i in (Path(__file__).parent / 'downloads').iterdir() if i.name.startswith(uuid_)][0]
-        file_name = f"{info['title']}.{info['ext']}"
+        file_name = f"{title}.{ext}"
 
         # bots have a limit of 8mb per file
         try:
@@ -189,7 +193,7 @@ class YouTube(commands.Cog):
                 )
                 await self._store_file_ref(msg.id, file_)
         finally:
-            os.remove(str(file))
+            file.unlink()
 
 
 async def setup(bot: RoboDan):
