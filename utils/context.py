@@ -170,6 +170,12 @@ class Context(commands.Context):
         await view.wait()
         return view.selected
 
+    async def affirm(self, message: str, /):
+        await self.send(embed=discord.Embed(colour=0x8BC34A, description=message))
+
+    async def deny(self, message: str, /):
+        await self.send(embed=discord.Embed(colour=0xF44336, description=message))
+
 
 class GuildContext(Context):
     author: discord.Member
