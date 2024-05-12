@@ -2,7 +2,7 @@
 
 [[package]]
 name = "aiob2"
-version = "0.8.3"
+version = "0.8.4"
 description = "A simple and easy to use async wrapper for Backblaze's B2 bucket API."
 category = "main"
 optional = false
@@ -21,7 +21,7 @@ speed = []
 type = "git"
 url = "https://github.com/Void-ux/aiob2.git"
 reference = "master"
-resolved_reference = "d89bea4f2448eda75b566c5ec1b663addb9dcfb6"
+resolved_reference = "1d05c977aab45cec0beb484cc9f4bcf0c865554a"
 
 [[package]]
 name = "aiohttp"
