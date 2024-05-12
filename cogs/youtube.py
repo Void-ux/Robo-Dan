@@ -83,7 +83,7 @@ def download(url: str, file_name: str, format: MediaFormat):
         }]
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url)
+        info = ydl.extract_info(url, download=False)
         ydl.download([url])
 
     return info
@@ -168,11 +168,13 @@ class YouTube(commands.Cog):
             else:
                 # avoid overwriting the OS file defined above
                 start = time.perf_counter()
-                file_ = await self.bot.bucket.upload_large_file(
+                large_file = await self.bot.bucket.upload_large_file(
                     file_name=file.name,
                     content_type='video/x-matroska',
                     bucket_id=self.bot.config['backblaze']['bucket_id'],
                 )
+                await large_file.chunk_file(str(file))
+                file_ = await large_file.finish()
                 end = time.perf_counter()
                 upload_time = end - start
                 link = f'https://cdn.void-ux.com/file/imooog/downloads/{quote(file_name)}'
