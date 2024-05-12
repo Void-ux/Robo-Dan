@@ -87,10 +87,6 @@ def download(url: str, file_name: str, format: MediaFormat):
         info = ydl.extract_info(url)
         ydl.download([url])
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url)
-        ydl.download([url])
-
     return info
 
 
