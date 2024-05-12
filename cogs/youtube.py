@@ -35,7 +35,6 @@ def download(url: str, file_name: str, format: MediaFormat):
         'final_ext': 'mp4',
         'format': 'bv*+ba/b',
         'fragment_retries': 10,
-        'ignoreerrors': 'only_download',
         'merge_output_format': 'mp4',
         'outtmpl': {
             'default': f'{str(path)}/{file_name}.%(ext)s',
