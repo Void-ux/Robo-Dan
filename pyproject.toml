@@ -1,44 +1,4 @@
-[tool.poetry]
-name = "robo dan"
-version = "0.1.0"
-description = ""
-authors = ["Void-ux <daniel.grant2017@gmail.com>"]
-
-[tool.poetry.dependencies]
-python = "^3.10"
-Pillow = "^9.2.0"
-toml = "^0.10.2"
-aiohttp = {extras = ["speed"], version = "^3.8.1"}
-asyncpg = "^0.26.0"
-colorama = "^0.4.5"
-psutil = "^5.9.2"
-python-dateutil = "^2.8.2"
-parsedatetime = "^2.6"
-jishaku = "^2.5.1"
-yt-dlp = "^2024.4.9"
-mystbin-py = "^6.0.2"
-orjson = "^3.8.0"
-uvloop = { version = "^0.17.0", markers = "sys_platform == 'linux'" }
-humanize = "^4.3.0"
-aiob2 = {git = "https://github.com/Void-ux/aiob2.git", rev = "master"}
-beautifulsoup4 = "^4.11.1"
-pytz = "^2023.3.post1"
-line-profiler = "^4.1.1"
-lru-dict = "^1.2.0"
-lxml = "^4.9.3"
-torch = ">=2.0.0, !=2.0.1, !=2.1.0"
-openai-whisper = {git = "https://github.com/openai/whisper.git"}
-discord-ext-voice-recv = "^0.4.2a145"
-discord-py = {git = "https://github.com/Rapptz/discord.py"}
-
-[tool.poetry.dev-dependencies]
-
-[tool.poetry.group.dev.dependencies]
-isort = "^5.11.4"
-
 [tool.pyright]
-venvPath = "/home/dan/.cache/pypoetry/virtualenvs"
-venv = "robo_dan-xAwpTgwo-py3.11"
 typeCheckingVersion = "off"
 pythonVersion = "3.11"
 reportUnusedImport = "error"
@@ -55,3 +15,18 @@ target-version = "py310"
 # # todo: decide what to do with S101
 # ignore = ["G002", "TRY002", "S101", "PLR2004", "SIM105"]
 # unfixable = ["C90", "S101", "ERA"]
+
+[tool.pdm]
+distribution = false
+
+[project]
+name = "robo-dan"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Void-ux", email = "77840397+Void-ux@users.noreply.github.com"},
+]
+dependencies = []
+requires-python = "==3.10.*"
+readme = "README.md"
+license = {text = "MIT"}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import aiob2
-import mystbin
 import datetime
 import logging
 from collections import Counter
@@ -57,7 +56,6 @@ class RoboDan(commands.Bot):
     session: aiohttp.ClientSession
     bucket: aiob2.Client
     sonarr: SonarrClient
-    mystbin: mystbin.Client
     command_stats: Counter[str]
     socket_stats: Counter[str]
     launch_time: datetime.datetime

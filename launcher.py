@@ -19,7 +19,6 @@ import aiob2
 import aiohttp
 import asyncpg
 import discord
-import mystbin
 import toml
 
 from bot import RoboDan, Config
@@ -314,7 +313,6 @@ async def run_bot():
             bot.config['backblaze']['key'], 
             log_handler=None
         )
-        bot.mystbin = mystbin.Client()
 
         for extension in EXTENSIONS:
             await bot.load_extension(extension)
