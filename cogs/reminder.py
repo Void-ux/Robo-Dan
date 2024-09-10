@@ -442,6 +442,7 @@ class Reminder(commands.Cog):
         return timer
 
     @commands.hybrid_group(aliases=['timer', 'remind'], invoke_without_command=True)
+    @app_commands.allowed_installs(guilds=True, users=True)
     async def reminder(
         self,
         ctx: GuildContext,
@@ -482,7 +483,7 @@ class Reminder(commands.Cog):
 
         await ctx.send(msg)
 
-    @reminder.app_command.command(name='set')
+    @reminder.command(name='set')
     @app_commands.describe(when='When to be reminded of something.', text='What to be reminded of')
     async def reminder_set(
         self,

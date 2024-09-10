@@ -1,6 +1,6 @@
 [tool.pyright]
-typeCheckingVersion = "off"
-pythonVersion = "3.11"
+typeCheckingVersion = "basic"
+pythonVersion = "3.10"
 reportUnusedImport = "error"
 reportUnnecessaryTypeIgnoreComment = "error"
 
@@ -26,7 +26,36 @@ description = "Default template for PDM package"
 authors = [
     {name = "Void-ux", email = "77840397+Void-ux@users.noreply.github.com"},
 ]
-dependencies = []
-requires-python = "==3.10.*"
+dependencies = [
+    "click>=8.1.7",
+    "aiob2>=0.8.4",
+    "Pillow>=10.4.0",
+    "toml>=0.10.2",
+    "aiohttp>=3.9.5",
+    "asyncpg>=0.29.0",
+    "psutil>=6.0.0",
+    "python-dateutil>=2.9.0.post0",
+    "parsedatetime>=2.6",
+    "jishaku>=2.5.2",
+    "yt-dlp>=2024.7.2",
+    "orjson>=3.10.6",
+    "uvloop>=0.19.0",
+    "humanize>=4.9.0",
+    "beautifulsoup4>=4.12.3",
+    "pytz>=2024.1",
+    "line-profiler>=4.1.3",
+    "lru-dict>=1.3.0",
+    "lxml>=5.2.2",
+    "discord-py>=2.4.0",
+    "ffmpeg-python>=0.2.0",
+]
+requires-python = ">=3.10.*"
 readme = "README.md"
 license = {text = "MIT"}
+
+[project.optional-dependencies]
+stt = [
+    "torch>=2.3.1",
+    "openai-whisper>=20231117",
+    "discord-ext-voice-recv>=0.4.2a145",
+]

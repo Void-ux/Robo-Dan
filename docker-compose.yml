@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     container_name: rdan_db
     ports:
-      - 127.0.0.1:32400:5432
+      - 127.0.0.1:32800:5432
     image: library/postgres:14.2
     env_file:
       - ./postgres/.env
@@ -43,11 +43,25 @@ services:
     restart: unless-stopped
     container_name: rdan_bot
     build: .
-    volumes:
-      # allows us to access files downloaded from sonarr
-      - /home/dan/robo-dan/servarr/data:/data
     depends_on:
       - db
+    volumes:
+      # allows us to access files downloaded from sonarr
+      - ./servarr/data:/data
+      - type: bind
+        source: ./cogs
+        target: /main/cogs
+        read_only: true
+
+      - type: bind
+        source: ./utils
+        target: /main/utils
+        read_only: true
+
+      - type: bind
+        source: ./postgres
+        target: /main/postgres
+        read_only: true
 
 volumes:
   rdan-db:

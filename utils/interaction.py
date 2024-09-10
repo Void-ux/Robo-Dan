@@ -1,6 +1,10 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import discord
 
-from bot import RoboDan
+if TYPE_CHECKING:
+    from bot import RoboDan
 
 
 class Interaction(discord.Interaction):

@@ -20,6 +20,7 @@ import aiohttp
 import asyncpg
 import discord
 import toml
+from discord.ext import commands
 
 from bot import RoboDan, Config
 from cogs import EXTENSIONS
@@ -315,7 +316,16 @@ async def run_bot():
         )
 
         for extension in EXTENSIONS:
-            await bot.load_extension(extension)
+            try:
+                await bot.load_extension(extension)
+            except commands.errors.ExtensionFailed as e:
+                if extension == 'cogs.speech_to_text' and isinstance(e.__cause__, ModuleNotFoundError):
+                    log_.warning(
+                        'Unable to load `speech_to_text` extension due to an ImportError, please install with `stt` group '
+                        'if you would like this functionality'
+                    )
+                else:
+                    raise
         await bot.load_extension("jishaku")
 
         asyncio.create_task(bot.startup_message())
