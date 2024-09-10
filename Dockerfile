@@ -1,7 +1,4 @@
-FROM jrottenberg/ffmpeg:4.1-scratch AS ffmpeg
-
-FROM python:3.11.7 AS builder
-COPY --from=ffmpeg /bin/ffmpeg /usr/bin/ffmpeg
+FROM python:3.11.7
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -16,12 +13,11 @@ RUN apt-get update \
     && apt-get install --no-install-recommends -y \
     git \
     # deps for installing poetry
-    curl \
-    # deps for building python deps
     build-essential \
     libcurl4-gnutls-dev \
     gnutls-dev \
-    libmagic-dev
+    libmagic-dev \
+    ffmpeg
 
 RUN pip install -U pdm
 
@@ -31,4 +27,4 @@ COPY pdm.lock pyproject.toml ./
 RUN pdm install --check --prod --no-editable
 
 COPY . .
-ENTRYPOINT poetry run python -O launcher.py
+ENTRYPOINT .venv/bin/python launcher.py

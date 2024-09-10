@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import tempfile
+import logging
 from io import BytesIO
 from typing import TYPE_CHECKING
 
 import discord
 import wave
 import whisper
-import logging
 from discord.ext import commands, voice_recv
 from discord.ext.voice_recv import VoiceData, AudioSink, SilenceGeneratorSink
 from discord.opus import Decoder as OpusDecoder

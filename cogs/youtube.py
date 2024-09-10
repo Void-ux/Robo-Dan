@@ -1,24 +1,30 @@
 from __future__ import annotations
 
+from collections import namedtuple
 import enum
+import textwrap
 import uuid
 import time
+import traceback
 from urllib.parse import quote
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from pathlib import Path
 
-from aiob2 import File, LargeFile
 import discord
+import humanize
 import yt_dlp
+import ffmpeg
+from aiob2 import File, LargeFile
 from discord import app_commands
 from discord.ext import commands
 from jishaku.functools import executor_function
 
 from utils import affirmation_embed
-from utils.context import GuildContext
+from utils.interaction import Interaction
 if TYPE_CHECKING:
     from bot import RoboDan
     from utils.interaction import Interaction
+    from utils.context import Context
 
 
 class MediaFormat(str, enum.Enum):
@@ -28,7 +34,7 @@ class MediaFormat(str, enum.Enum):
 
 @executor_function
 def download(url: str, file_name: str, format: MediaFormat):
-    path = Path(__file__).parent / 'downloads'
+    path = Path('/tmp/.ytdownloads')
     ydl_opts = {
         'concurrent_fragment_downloads': 2,
         'extract_flat': 'discard_in_playlist',
@@ -89,6 +95,31 @@ def download(url: str, file_name: str, format: MediaFormat):
     return info
 
 
+VideoInfo = namedtuple('VideoInfo', (
+    'file_name',
+    'duration',
+    'size',
+    'bit_rate',
+    'format',
+    'metadata'
+))
+
+
+def get_video_info(path: Path):
+    probe: dict[str, Any] = ffmpeg.probe(str(path))
+    try:
+        return VideoInfo(
+            probe['format']['filename'],
+            humanize.precisedelta(probe['format']['duration'], format='%0.0f'),
+            humanize.naturalsize(probe['format']['size']),
+            f"{humanize.naturalsize(probe['format']['bit_rate']).replace(' ', '')}/s",
+            probe['format']['format'],
+            probe['format']['tags']
+        )
+    except KeyError:
+        return
+
+
 class DownloadControls(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -125,13 +156,15 @@ class YouTube(commands.Cog):
             message_id, file.name, file.id
         )
 
-    @commands.hybrid_group(invoke_without_command=True, aliases=['yt'])
-    async def youtube(self, ctx: GuildContext):
+    @commands.hybrid_group(invoke_without_command=True, aliases=['yt'], extras={'id': 45}, fallback='help')
+    @app_commands.allowed_installs(guilds=True, users=True)
+    async def youtube(self, ctx: Context):
         pass
 
-    @youtube.command(name='download', aliases=['dl'])
+    @youtube.command(name='download')
     @app_commands.rename(format='format')
-    async def youtube_download(self, ctx: GuildContext, url: str, format: MediaFormat = MediaFormat.VIDEO):
+    @app_commands.describe(url='The URL of the video you would like to download', format='The output video format')
+    async def youtube_download(self, ctx: Context, url: str, format: MediaFormat = MediaFormat.VIDEO):
         """
         Downloads a video from one of thousands of hosts online such as YouTube, Reddit, TikTok, etc.
 
@@ -155,41 +188,73 @@ class YouTube(commands.Cog):
             title = info['title']
             ext = info['ext']
 
-        file = [i for i in (Path(__file__).parent / 'downloads').iterdir() if i.name.startswith(uuid_)][0]
+        file = [i for i in Path('/tmp/.ytdownloads').iterdir() if i.name.startswith(uuid_)][0]
         file_name = f"{title}.{ext}"
+        file_size = file.stat().st_size
+        probe = get_video_info(file)
+        if probe:
+            info = textwrap.dedent(f"""```
+                Title: {probe.file_name}
+                Duration: {probe.duration}
+                Size: {probe.size}
+                Bit Rate: {probe.bit_rate}
+                Format: {probe.format}
+                Metadata: {', '.join(k for k in probe.metadata.keys())}```
+            """)
+        else:
+            info = ''
 
         # bots have a limit of 8mb per file
         try:
-            if len(file.read_bytes()) <= 8_388_608:
-                await ctx.reply(
-                    f'Took `{download_time:.2f}` seconds to download.',
+            start = time.perf_counter()
+            if file_size <= 8_388_608:
+                return await ctx.send(
+                    f'Took `{download_time:.2f}` seconds to download.' + info,
                     file=discord.File(fp=file, filename=file_name)
                 )
-            else:
-                # avoid overwriting the OS file defined above
-                start = time.perf_counter()
-                large_file = await self.bot.bucket.upload_large_file(
-                    file_name=file.name,
+            elif file_size <= (self.bot.bucket._http._recommended_part_size or 100_000_000):  # 100mb
+                file_ = await self.bot.bucket.upload_file(
+                    file_name=f'downloads/{file_name}',
+                    content_bytes=file.read_bytes(),
                     content_type='video/x-matroska',
-                    bucket_id=self.bot.config['backblaze']['bucket_id'],
+                    bucket_id=self.bot.config['backblaze']['bucket_id']
+                )
+            elif await self.bot.is_owner(ctx.author) or file_size <= 1_000_000_000:
+                # avoid overwriting the OS file defined above
+                large_file = await self.bot.bucket.upload_large_file(
+                    file_name=f'downloads/{file_name}',
+                    content_type='video/x-matroska',
+                    bucket_id=self.bot.config['backblaze']['bucket_id']
                 )
                 await large_file.chunk_file(str(file))
                 file_ = await large_file.finish()
-                end = time.perf_counter()
-                upload_time = end - start
-                link = f'https://cdn.void-ux.com/file/imooog/downloads/{quote(file_name)}'
-
-                view = DownloadControls()
-                view.add_item(discord.ui.Button(label='Go to video', url=link))
-
-                msg = await ctx.reply(
-                    f"Took `{download_time:.2f}` seconds to download and `{upload_time:.2f}` seconds to upload.\n"
-                    f"If there's no video embed below, click the URL to view it in your browser.\n{link}",
-                    view=view
-                )
-                await self._store_file_ref(msg.id, file_)
+            else:
+                return await ctx.send('File too large!')
+            end = time.perf_counter()
+        except Exception:
+            tb = traceback.format_exc()
+            e = discord.Embed(
+                description=f'```py\n{tb}```'  ,
+                timestamp=discord.utils.utcnow() 
+            )
+            e.set_author(name='Something went wrong...', icon_url=ctx.author.display_avatar)
+            await ctx.send(embed=e, ephemeral=True)
+            raise
         finally:
             file.unlink()
+
+        upload_time = end - start
+        link = f'https://cdn.danielgnt.com/file/imooog/downloads/{quote(file_name)}'
+
+        view = DownloadControls()
+        view.add_item(discord.ui.Button(label='Go to video', url=link))
+
+        msg = await ctx.send(
+            f"Took `{download_time:.2f}` seconds to download and `{upload_time:.2f}` seconds to upload.\n"
+            f"If there's no video embed below, click the URL to view it in your browser.\n{link}" + info,
+            view=view
+        )
+        await self._store_file_ref(msg.id, file_)
 
 
 async def setup(bot: RoboDan):
