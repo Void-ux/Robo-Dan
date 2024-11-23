@@ -357,6 +357,7 @@ def init():
     """Initializes the database and runs all the current migrations"""
 
     migrations = Migrations()
+    migrations.database_uri = _create_uri(config)
     asyncio.run(ensure_uri_can_run(migrations.database_uri))
 
     try:
