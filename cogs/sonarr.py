@@ -309,8 +309,7 @@ class Sonarr(commands.Cog):
             title=episode['title'],
             description=textwrap.shorten(episode['overview'], 250, placeholder='...')
         )
-        e.set_image(url=episode['images'][0]['url'])
-        e.set_thumbnail(url=e.thumbnail.url)
+        e.set_image(url=episode['images'][0].get('url') or episode['images'][0].get('remoteUrl'))
         e.set_footer(text='Once an episode is downloaded, the link to it will be edited into this embed')
         m = await ctx.send(embed=e)
 
@@ -462,9 +461,8 @@ class Sonarr(commands.Cog):
                 episode = await self.bot.sonarr.get_episode(episode['id'])
                 await self.monitor_episode(episode, ctx)
 
-
 async def setup(bot: RoboDan):
     if not hasattr(bot, 'sonarr'):
-        bot.sonarr = SonarrClient(bot.config['sonarr']['api_key'])
+        bot.sonarr = SonarrClient(bot.config['sonarr']['api_key'], host=bot.config['sonarr']['host'])
 
     await bot.add_cog(Sonarr(bot))
