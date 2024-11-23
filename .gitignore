@@ -4,6 +4,7 @@ config.toml
 logs/
 *.json
 *.ttf
+.pdm-python
 
 
 .vscode
