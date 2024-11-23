@@ -30,6 +30,7 @@ class BackblazeConfig(TypedDict):
     key_id: str
     key: str
     bucket_id: str
+    url: str
 
 
 class SonarrConfig(TypedDict):

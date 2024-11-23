@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from collections import namedtuple
 import enum
 import textwrap
 import uuid
 import time
 import traceback
+from pathlib import Path
+from collections import namedtuple
 from urllib.parse import quote
 from typing import TYPE_CHECKING, Any
-from pathlib import Path
 
 import discord
 import humanize
+import yarl
 import yt_dlp
 import ffmpeg
 from aiob2 import File, LargeFile
@@ -21,6 +22,7 @@ from jishaku.functools import executor_function
 
 from utils import affirmation_embed
 from utils.interaction import Interaction
+
 if TYPE_CHECKING:
     from bot import RoboDan
     from utils.interaction import Interaction
@@ -161,7 +163,7 @@ class YouTube(commands.Cog):
     async def youtube(self, ctx: Context):
         pass
 
-    @youtube.command(name='download')
+    @youtube.command(name='download', aliases=['dl'])
     @app_commands.rename(format='format')
     @app_commands.describe(url='The URL of the video you would like to download', format='The output video format')
     async def youtube_download(self, ctx: Context, url: str, format: MediaFormat = MediaFormat.VIDEO):
@@ -244,7 +246,7 @@ class YouTube(commands.Cog):
             file.unlink()
 
         upload_time = end - start
-        link = f'https://cdn.danielgnt.com/file/imooog/downloads/{quote(file_name)}'
+        link = str(yarl.URL(self.bot.config['backblaze']['url']).joinpath(quote(file_name)))
 
         view = DownloadControls()
         view.add_item(discord.ui.Button(label='Go to video', url=link))
