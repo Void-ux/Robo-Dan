@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 
 from utils.context import GuildContext
 from utils.interaction import Interaction
+from utils.sonarr import Client as SonarrClient
 from utils.models.sonarr import SeriesPayload, EpisodePayload, EpisodeFilePayload
 
 if TYPE_CHECKING:
@@ -463,4 +464,7 @@ class Sonarr(commands.Cog):
 
 
 async def setup(bot: RoboDan):
+    if not hasattr(bot, 'sonarr'):
+        bot.sonarr = SonarrClient(bot.config['sonarr']['api_key'])
+
     await bot.add_cog(Sonarr(bot))
