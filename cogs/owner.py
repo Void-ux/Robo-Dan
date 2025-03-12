@@ -137,13 +137,6 @@ class Owner(commands.Cog):
                 except discord.HTTPException:
                     await ctx.deny(f'Unable to convert the <{ordinal(c)}> URL to an emoji.')
 
-        text = f'```{'\n'.join(str(i) for i in created_emojis)}```'
-        await ctx.send(f'Added `{len(created_emojis)}` emojis to **{ctx.guild.name}**.\n' + text)
-
-    @commands.hybrid_command()
-    async def test(self, ctx: GuildContext):
-        await ctx.send('asdaaa')
-
 
 async def setup(bot: RoboDan):
     await bot.add_cog(Owner(bot))

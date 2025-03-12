@@ -65,10 +65,6 @@ class LazyHotReload(commands.Cog):
         if last_modified is None:  # builtins
             return False
 
-        # if our ext is already up-to-date, skip it
-        if last_modified <= self.last_modified_times[extension]:
-            return True
-
         try:
             log.info('Found an update to %s; performing update')
             await self.bot.reload_extension(extension)
