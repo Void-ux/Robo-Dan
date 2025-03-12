@@ -91,6 +91,10 @@ class LazyHotReload(commands.Cog):
            return
 
         last_modified = get_last_modified(ext)
+        if self.last_modified_times.get(ext) is None:
+            log.info('Unknown module {}; will continue to monitor.', ext)
+            return
+
         if last_modified is None or last_modified <= self.last_modified_times[ext]:
             log.info('Skipping %s; already up to date.', ext)
             return
@@ -163,11 +167,12 @@ class LazyHotReload(commands.Cog):
         except commands.ExtensionError as e:
             await ctx.send(f'{e.__class__.__name__}: {e}')
         else:
-            await ctx.send(f'\N{OK HAND SIGN} *(in {round((end - start) * 100)})*')
+            await ctx.send(f'\N{OK HAND SIGN} *(in {round((end - start) * 100, 2)}ms)*')
 
     @reload.command(name='stats', aliases=['info'])
     @commands.is_owner()
     async def reload_stats(self, ctx: Context):
+        """Displays information for all the currently online modules."""
         rows = []
         for ext in Path('cogs').iterdir():
             if not ext.name.endswith('.py') or ext.name.startswith('__'):
