@@ -19,12 +19,11 @@ import aiob2
 import aiohttp
 import asyncpg
 import discord
-import toml
 from discord.ext import commands
 
-from bot import RoboDan, Config
+import config
+from bot import RoboDan
 from cogs import EXTENSIONS
-
 
 try:
     import uvloop
@@ -41,17 +40,13 @@ os.environ['JISHAKU_NO_DM_TRACEBACK'] = "True"
 os.environ['JISHAKU_HIDE'] = "True"
 
 
-with open('config.toml') as file:
-    config: Config = toml.load(file)  # type: ignore
-
-
-def _create_uri(conf: Config) -> str:
+def _create_uri() -> str:
     return "postgresql://{}:{}@{}:{}/{}".format(
-        conf['database']['user'],
-        quote(conf['database']['password']),
-        conf['database']['host'],
-        conf['database'].get('port', 5432),
-        conf['database']['database']
+        config.postgres_user,
+        quote(config.postgres_password),
+        config.postgres_host,
+        config.postgres_port,
+        config.postgres_database
     )
 
 
@@ -289,12 +284,12 @@ async def create_pool() -> asyncpg.Pool:
         )
 
     return await asyncpg.create_pool(
-        _create_uri(config),
+        _create_uri(),
         init=init,
         command_timeout=300,
         max_size=20,
         min_size=20,
-    )  # type: ignore
+    )
 
 
 async def run_bot():
@@ -306,12 +301,12 @@ async def run_bot():
         log_.exception('Could not set up PostgreSQL. Exiting.')
         return
 
-    async with RoboDan(config) as bot:
+    async with RoboDan() as bot:
         bot.pool = pool
         bot.session = aiohttp.ClientSession()
         bot.bucket = aiob2.Client(
-            bot.config['backblaze']['key_id'],
-            bot.config['backblaze']['key'], 
+            bot.config.bz_key_id,
+            bot.config.bz_key, 
             log_handler=None
         )
 
@@ -357,7 +352,7 @@ def init():
     """Initializes the database and runs all the current migrations"""
 
     migrations = Migrations()
-    migrations.database_uri = _create_uri(config)
+    migrations.database_uri = _create_uri()
     asyncio.run(ensure_uri_can_run(migrations.database_uri))
 
     try:

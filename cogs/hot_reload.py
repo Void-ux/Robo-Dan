@@ -1,100 +1,191 @@
+import asyncio
 import os
 import logging
 import importlib.util
 from pathlib import Path
 
+import discord
 from discord.ext import commands
+from colorama import Fore
 
 from utils.interaction import Interaction
 from utils.context import Context
 
 log = logging.getLogger(__name__)
-IGNORE_EXTENSIONS = ('Jishaku', )
+
+IGNORE_EXTENSIONS = ('jishaku', )
 
 
-def get_last_modified(extension: str) -> int:
-    spec = importlib.util.find_spec(extension, None)
-    return os.path.getmtime(spec.origin)  # pyright: ignore
+def colour_format(m) -> str:
+    return Fore.GREEN + m + Fore.RESET
+
+
+def get_last_modified(ext: Path | str) -> float | None:
+    if isinstance(ext, Path):
+        ext = f'{__name__}.{ext.name}'
+    spec = importlib.util.find_spec(ext, None)
+    if spec is None:
+        raise commands.BadArgument(f'Unable to find extension: {ext}')
+
+    if spec.origin is None:  # eg builtins
+        raise commands.BadArgument(f'Unknown error occured finding origin of {ext}')
+    return os.path.getmtime(spec.origin)
 
 
 class LazyHotReload(commands.Cog):
+    """Reloads your command's extension just before it gets invoked,
+    to ensure the latest code is actively ran.
+
+    TL:DR; saves you from having to `-reload` during development.
+    """
+
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.last_modified_times: dict[str, float | None] = {}
+        self.last_modified_times: dict[str, float] = {}
         self.bot.add_check(self.lazy_reload)
-        self._old_interaction_check = self.bot.tree.interaction_check
+        self._old_tree_check = self.bot.tree.interaction_check
         self.bot.tree.interaction_check = self.interaction_check  # pyright: ignore
 
-    async def _reload_extension(self, extension: str) -> int:
+    async def _populate(self):
+        await asyncio.sleep(3)
+
+        for ext in self.bot.extensions.keys():
+            if ext in IGNORE_EXTENSIONS:
+                continue
+
+            last_modified = get_last_modified(ext)
+            if last_modified is None:
+                continue
+            self.last_modified_times[ext] = last_modified
+
+    async def reload_extension(self, extension: str) -> bool:
+        """Reload a single extension."""
+        last_modified = get_last_modified(extension)
+        
+        if last_modified is None:  # builtins
+            return False
+
+        # if our ext is already up-to-date, skip it
+        if last_modified <= self.last_modified_times[extension]:
+            return True
+
         try:
+            log.info('Found an update to %s; performing update')
             await self.bot.reload_extension(extension)
         except commands.ExtensionError:
-            log.error("\x1b[31mCouldn't reload extension: %s\x1b[0m", extension)
-            return 1
+            log.info('Unable to load `%s`', extension)
         else:
-            log.info('\x1b[32m✔ Reloaded extension: %s\x1b[0m', extension)
-            return 0
+            self.last_modified_times[extension] = last_modified
+            log.info('Reloaded extension: %s', extension)
+
+        return False
+
+    async def reload_extensions(self) -> None:
+        """Reload all extensions present in the cogs/ directory."""
+        for ext in Path('cogs').iterdir():
+            await self.reload_extension(f'{__name__}.{ext}')
+
+    async def _process_command(self, ctx: Context) -> None:
+        """Checks a command's module for pending updates, and if yes, applies them and then re-invokes."""
+        assert ctx.command
+        ext = ctx.command.module
+        if ext not in self.bot.extensions:
+           log.info('%s is not being tracked.', ext)
+           return
+
+        last_modified = get_last_modified(ext)
+        if last_modified is None or last_modified <= self.last_modified_times[ext]:
+            log.info('Skipping %s; already up to date.', ext)
+            return
+
+        fail = await self.reload_extension(ext)
+        if fail:
+            log.warning('Unable to reload extension %s', ext)
+            return
+
+        command = self.bot.get_command(ctx.command.qualified_name)
+        if command is None:
+            log.info('Command not found.')
+            return
+
+    async def lazy_reload(self, ctx: Context) -> bool:
+        """Handles hot reloading prior to text invokation."""
+        await self._process_command(ctx)
+        return True
 
     async def interaction_check(  # pyright: ignore
         self,
         interaction: Interaction,
         /
     ) -> bool:
-        failure = await self._old_interaction_check(interaction)  # pyright: ignore
-        if failure:
+        """Serves to block command invcation until its module/cog is up to date.
+        Wraps around other pre-defined `interaction_check` to facilitate reloading,
+        even when invoked via app command.
+        """
+        if interaction.type != discord.InteractionType.application_command:
             return True
 
-        extension = __name__
-        last_modified = get_last_modified(extension)
+        failure = await self._old_tree_check(interaction)  # pyright: ignore
+        if failure:
+            return False
 
-        if last_modified > self.last_modified_times[extension]:
-            failure = await self._reload_extension(extension)
-            if not failure:
-                self.last_modified_times[extension] = last_modified
-                ctx = await Context.from_interaction(interaction)
-                command = self.bot.get_command(ctx.command.qualified_name)  # pyright: ignore 
-                ctx.command = command
-
-                await self.bot.invoke(ctx)
-                return False
-
+        ctx = await Context.from_interaction(interaction)
+        await self._process_command(ctx)
         return True
 
-    async def populate_last_modified_times(self) -> None:
-        await self.bot.wait_until_ready()
+    @commands.hybrid_command()
+    @commands.is_owner()
+    async def load(self, ctx, *, module: str):
+        """Loads a module."""
+        try:
+            await self.bot.load_extension(f'cogs.{module}')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
+        else:
+            await ctx.send('\N{OK HAND SIGN}')
 
-        for extension in self.bot.extensions.keys():
-            if extension in IGNORE_EXTENSIONS:
+    @commands.hybrid_command()
+    @commands.is_owner()
+    async def unload(self, ctx, module: str):
+        """Unloads a module."""
+        try:
+            await self.bot.unload_extension(f'cogs.{module}')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
+        else:
+            await ctx.send('\N{OK HAND SIGN}')
+
+    @commands.hybrid_group(fallback='module')
+    @commands.is_owner()
+    async def reload(self, ctx: Context, *, module: str):
+        """Reloads a module. Set to 'all' to reload all outdated modules."""
+        try:
+            await self.bot.reload_extension(f'cogs.{module}')
+        except commands.ExtensionError as e:
+            await ctx.send(f'{e.__class__.__name__}: {e}')
+        else:
+            await ctx.send('\N{OK HAND SIGN}')
+
+    @reload.command(name='stats', aliases=['info'])
+    @commands.is_owner()
+    async def reload_stats(self, ctx: Context):
+        rows = []
+        for ext in Path('cogs').iterdir():
+            if not ext.name.endswith('.py') or ext.name.startswith('__'):
                 continue
 
-            last_modified = get_last_modified(extension)
-            self.last_modified_times[extension] = last_modified
+            if f'cogs.{ext.name.replace('.py', '')}' in self.bot.extensions:
+                text = f'<:tick:1349188008028672020> **Active** `cogs.{ext.name}`'
+            else:
+                text = f'<:cross:1349188010016768071> **Inactive** `cogs.{ext.name}`'
 
-    async def lazy_reload(self, ctx: commands.Context) -> bool:
-        assert ctx.command is not None
-
-        if ctx.command.cog_name and ctx.command.cog_name in IGNORE_EXTENSIONS:
-            return True
-
-        if self.last_modified_times == {}:
-            await self.populate_last_modified_times()
-            return True
-
-        extension = ctx.command.module
-        last_modified = get_last_modified(extension)
-
-        if self.last_modified_times[extension] and last_modified > self.last_modified_times[extension]:
-            failure = await self._reload_extension(extension)
-            if not failure:
-                self.last_modified_times[extension] = last_modified
-                command = self.bot.get_command(ctx.command.qualified_name)
-                ctx.command = command
-
-                await self.bot.invoke(ctx)
-                return False
-
-        return True
+            rows.append(text)
+            
+        e = discord.Embed(colour=0xC0C0C0, description='\n'.join(rows))
+        e.set_author(name='Modules', icon_url=self.bot.user.display_avatar)  # pyright: ignore
+        await ctx.send(embed=e)
 
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(LazyHotReload(bot))
+    await bot.add_cog(cog := LazyHotReload(bot))
+    asyncio.create_task(cog._populate())
