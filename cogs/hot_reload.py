@@ -2,6 +2,7 @@ import asyncio
 import os
 import logging
 import importlib.util
+import time
 from pathlib import Path
 
 import discord
@@ -66,15 +67,15 @@ class LazyHotReload(commands.Cog):
             return False
 
         try:
-            log.info('Found an update to %s; performing update')
+            log.info('Found an update to %s; performing update', extension)
             await self.bot.reload_extension(extension)
         except commands.ExtensionError:
-            log.info('Unable to load `%s`', extension)
+            log.info('Unable to load %s', extension)
+            return False
         else:
             self.last_modified_times[extension] = last_modified
             log.info('Reloaded extension: %s', extension)
-
-        return False
+            return True
 
     async def reload_extensions(self) -> None:
         """Reload all extensions present in the cogs/ directory."""
@@ -156,11 +157,13 @@ class LazyHotReload(commands.Cog):
     async def reload(self, ctx: Context, *, module: str):
         """Reloads a module. Set to 'all' to reload all outdated modules."""
         try:
+            start = time.perf_counter()
             await self.bot.reload_extension(f'cogs.{module}')
+            end = time.perf_counter()
         except commands.ExtensionError as e:
             await ctx.send(f'{e.__class__.__name__}: {e}')
         else:
-            await ctx.send('\N{OK HAND SIGN}')
+            await ctx.send(f'\N{OK HAND SIGN} *(in {round((end - start) * 100)})*')
 
     @reload.command(name='stats', aliases=['info'])
     @commands.is_owner()
