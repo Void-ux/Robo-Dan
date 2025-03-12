@@ -156,7 +156,7 @@ class LazyHotReload(commands.Cog):
         else:
             await ctx.send('\N{OK HAND SIGN}')
 
-    @commands.hybrid_group(fallback='module')
+    @commands.hybrid_group()
     @commands.is_owner()
     async def reload(self, ctx: Context, *, module: str):
         """Reloads a module. Set to 'all' to reload all outdated modules."""
