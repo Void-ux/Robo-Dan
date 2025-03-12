@@ -1,3 +1,5 @@
+import random
+import string
 import traceback
 import time
 from io import BytesIO
@@ -6,13 +8,14 @@ from typing import Literal
 import discord
 from discord import app_commands
 from discord.ext import commands
+import yarl
 
 from bot import RoboDan
 from utils import formats
 from utils.context import GuildContext
 
 
-class Developer(commands.Cog):
+class Owner(commands.Cog):
     def __init__(self, bot: RoboDan):
         self.bot = bot
 
@@ -95,39 +98,52 @@ class Developer(commands.Cog):
         fp = BytesIO(fmt.encode('utf-8'))
         await ctx.send(f'*Returned {formats.plural(rows):row} in {dt:.2f}ms*', file=discord.File(fp, 'results.txt'))
 
-    @commands.command()
+    @commands.command(aliases=['ae'])
+    @commands.guild_only()
     @commands.is_owner()
-    async def load(self, ctx, *, module: str):
-        """Loads a module."""
-        try:
-            await self.bot.load_extension(f'cogs.{module}')
-        except commands.ExtensionError as e:
-            await ctx.send(f'{e.__class__.__name__}: {e}')
-        else:
-            await ctx.send('\N{OK HAND SIGN}')
+    async def addemote(self, ctx: GuildContext, *emojis: discord.PartialEmoji | str):
+        """Adds any given emotes to the server (the name remains the same)."""
+        ordinal = lambda n: "%d%s" % (n, "tsnrhtdd"[(n//10 % 10 != 1)*(n % 10 < 4) * n % 10::4])  # noqa
+        def is_url(a):
+            return isinstance(a, str) and bool(formats._URL_REGEX.match(a))
 
-    @commands.command()
-    @commands.is_owner()
-    async def unload(self, ctx, module: str):
-        """Unloads a module."""
-        try:
-            await self.bot.unload_extension(f'cogs.{module}')
-        except commands.ExtensionError as e:
-            await ctx.send(f'{e.__class__.__name__}: {e}')
-        else:
-            await ctx.send('\N{OK HAND SIGN}')
+        created_emojis = []
+        for c, emoji in enumerate(emojis):
+            if isinstance(emoji, discord.PartialEmoji):
+                created_emojis.append(await ctx.guild.create_custom_emoji(
+                    name=emoji.name, image=await emoji.read(), reason=f'{ctx.author} used addemote.'
+                ))
+            elif is_url(emoji):
+                urls = list(filter(lambda x: is_url(x), emojis))
 
-    @commands.command()
-    @commands.is_owner()
-    async def reload(self, ctx: GuildContext, *, module: str):
-        """Reloads a module."""
-        try:
-            await self.bot.reload_extension(f'cogs.{module}')
-        except commands.ExtensionError as e:
-            await ctx.send(f'{e.__class__.__name__}: {e}')
-        else:
-            await ctx.send('\N{OK HAND SIGN}')
+                async with self.bot.session.get(emoji) as res:
+                    if not res.ok:
+                        return await ctx.send(
+                            f'Sorry, received a HTTP {res.status} when retrieving the {urls.index(emoji)}'
+                        )
+
+                url = yarl.URL(emoji)
+                if url.name.endswith(('.png', '.webp', '.gif', '.jpg', '.jpeg')):
+                    file_name = url.name.split('/')[-2]
+                else:
+                    file_name = random.shuffle(list(string.ascii_lowercase) + list(string.digits))[:5]  # pyright: ignore
+
+                try:
+                    created_emojis.append(await ctx.guild.create_custom_emoji(
+                        name=file_name,
+                        image=await res.read(),
+                        reason=f'{ctx.author} used addemote.'
+                    ))
+                except discord.HTTPException:
+                    await ctx.deny(f'Unable to convert the <{ordinal(c)}> URL to an emoji.')
+
+        text = f'```{'\n'.join(str(i) for i in created_emojis)}```'
+        await ctx.send(f'Added `{len(created_emojis)}` emojis to **{ctx.guild.name}**.\n' + text)
+
+    @commands.hybrid_command()
+    async def test(self, ctx: GuildContext):
+        await ctx.send('asdaaa')
 
 
 async def setup(bot: RoboDan):
-    await bot.add_cog(Developer(bot))
+    await bot.add_cog(Owner(bot))
