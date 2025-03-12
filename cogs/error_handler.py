@@ -149,7 +149,7 @@ class ErrorHandler(commands.Cog):
 
         e = discord.Embed(title='Event Error', colour=0xA32952, timestamp=discord.utils.utcnow())
         trace = ''.join(traceback.format_exception(exc_type, exc, tb))
-        e.description = f'```py\n{trace}\n```'
+        e.description = f'```py\n{trace}\n```'[:4096]
 
         args_str = ['```py']
         for index, arg in enumerate(args):

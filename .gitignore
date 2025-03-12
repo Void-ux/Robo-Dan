@@ -5,7 +5,7 @@ logs/
 *.json
 *.ttf
 .pdm-python
-
+config.py
 
 .vscode
 *.sublime-project

@@ -194,7 +194,7 @@ async def monitor_download(
     file_name = f"{episode['series']['title']}/S{episode['seasonNumber']:02}/{episode['title']}.{ext}"
 
     large_file = await ctx.bot.bucket.upload_large_file(
-        ctx.bot.config['backblaze']['bucket_id'],
+        ctx.bot.config.bz_bucket_id,
         f'sonarr/{file_name}'
     )
     start = time.perf_counter()
@@ -463,6 +463,6 @@ class Sonarr(commands.Cog):
 
 async def setup(bot: RoboDan):
     if not hasattr(bot, 'sonarr'):
-        bot.sonarr = SonarrClient(bot.config['sonarr']['api_key'], host=bot.config['sonarr']['host'])
+        bot.sonarr = SonarrClient(bot.config.sonarr_api_key, host=bot.config.sonarr_host)
 
     await bot.add_cog(Sonarr(bot))

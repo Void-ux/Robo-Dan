@@ -219,14 +219,14 @@ class YouTube(commands.Cog):
                     file_name=f'downloads/{file_name}',
                     content_bytes=file.read_bytes(),
                     content_type='video/x-matroska',
-                    bucket_id=self.bot.config['backblaze']['bucket_id']
+                    bucket_id=self.bot.config.bz_bucket_id
                 )
             elif await self.bot.is_owner(ctx.author) or file_size <= 1_000_000_000:
                 # avoid overwriting the OS file defined above
                 large_file = await self.bot.bucket.upload_large_file(
                     file_name=f'downloads/{file_name}',
                     content_type='video/x-matroska',
-                    bucket_id=self.bot.config['backblaze']['bucket_id']
+                    bucket_id=self.bot.config.bz_bucket_id
                 )
                 await large_file.chunk_file(str(file))
                 file_ = await large_file.finish()
@@ -246,7 +246,7 @@ class YouTube(commands.Cog):
             file.unlink()
 
         upload_time = end - start
-        link = str(yarl.URL(self.bot.config['backblaze']['url']).joinpath(quote(file_name)))
+        link = str(yarl.URL(self.bot.config.cdn_url).joinpath(quote(file_name)))
 
         view = DownloadControls()
         view.add_item(discord.ui.Button(label='Go to video', url=link))

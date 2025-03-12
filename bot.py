@@ -4,52 +4,22 @@ import aiob2
 import datetime
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Iterable
 
 import aiohttp
 import asyncpg
 import discord
 from discord.ext import commands
 
+from cogs.hot_reload import LazyHotReload
 from utils.context import Context
 from utils.sonarr import Client as SonarrClient
 from cogs.youtube import DownloadControls
 
+import config
+
 if TYPE_CHECKING:
     from cogs.reminder import Reminder
-
-
-class PostgresConfig(TypedDict):
-    host: str
-    user: str
-    password: str
-    database: str
-
-
-class BackblazeConfig(TypedDict):
-    key_id: str
-    key: str
-    bucket_id: str
-    url: str
-
-
-class SonarrConfig(TypedDict):
-    host: str
-    api_key: str
-
-
-class WebhookConfig(TypedDict):
-    wh_id: int
-    wh_token: str
-
-
-class Config(TypedDict):
-    token: str
-    owner_ids: list[int]
-    database: PostgresConfig
-    backblaze: BackblazeConfig
-    sonarr: SonarrConfig
-    error: WebhookConfig
 
 
 class RoboDan(commands.Bot):
@@ -61,11 +31,12 @@ class RoboDan(commands.Bot):
     socket_stats: Counter[str]
     launch_time: datetime.datetime
 
-    def __init__(self, config: Config):
+    def __init__(self):
         super().__init__(
-            command_prefix=commands.when_mentioned_or('-'),
+            command_prefix=lambda bot, msg: \
+                config.prefixes + ['-'] if getattr(msg.guild, 'id') == config.guild_id else config.prefixes,
             intents=discord.Intents.all(),
-            owner_ids=config['owner_ids'],
+            owner_ids=config.owner_ids,
             chunk_guilds_at_startup=True
         )
 
@@ -77,16 +48,20 @@ class RoboDan(commands.Bot):
 
     @discord.utils.cached_property
     def error_webhook(self):
-        hook = discord.Webhook.partial(
-            id=self.config['error']['wh_id'],
-            token=self.config['error']['wh_token'],
-            session=self.session
-        )
+        hook = discord.Webhook.partial(*config.error_webhook, session=self.session)
         return hook
 
     @property
-    def reminder(self) -> Reminder | None:
-        return self.get_cog('Reminder')  # type: ignore
+    def reminder(self) -> Reminder:
+        return self.get_cog('Reminder')  # pyright: ignore
+
+    @property
+    def hot_reloader(self) -> LazyHotReload:
+        return self.get_cog('LazyHotReload')  # pyright: ignore
+
+    # @property
+    # def user(self) -> discord.User:  # pyright: ignore
+    #     return super().user  # pyright: ignore
 
     async def ctx_check(self, ctx: Context) -> bool:
         return ctx.author.id == 723943620054614047
@@ -105,8 +80,8 @@ class RoboDan(commands.Bot):
     async def setup_hook(self) -> None:
         self.launch_time = datetime.datetime.utcnow()
 
-    async def start(self, *, reconnect: bool = True) -> None:
-        await super().start(self.config['token'], reconnect=reconnect)
+    async def start(self, *, reconnect: bool = True) -> None:  # pyright: ignore
+        await super().start(config.token, reconnect=reconnect)
 
     async def close(self) -> None:
         await super().close()
