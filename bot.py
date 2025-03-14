@@ -4,12 +4,13 @@ import aiob2
 import datetime
 import logging
 from collections import Counter
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 import aiohttp
 import asyncpg
 import discord
 from discord.ext import commands
+from discord.types.emoji import Emoji as EmojiPayload
 
 from cogs.hot_reload import LazyHotReload
 from utils.context import Context
@@ -59,9 +60,24 @@ class RoboDan(commands.Bot):
     def hot_reloader(self) -> LazyHotReload:
         return self.get_cog('LazyHotReload')  # pyright: ignore
 
-    # @property
-    # def user(self) -> discord.User:  # pyright: ignore
-    #     return super().user  # pyright: ignore
+    @property
+    def user(self) -> discord.User:  # pyright: ignore
+        return super().user  # pyright: ignore
+
+    async def create_emoji(self, name: str, image_url: str) -> EmojiPayload:
+        async with self.session.get(image_url) as res:
+            if not res.ok:
+                raise commands.BadArgument('Sorry, your image URL does not point to a valid image.')
+            data = discord.utils._bytes_to_base64_data(await res.read())
+
+        async with self.session.post(
+            f'https://discord.com/api/v10/applications/{self.user.id}/emojis',
+            headers={'Authorization': f'Bot {config.token}'},
+            json={'name': name, 'image': data},
+        ) as res:
+            data = await res.json()
+
+        return data
 
     async def ctx_check(self, ctx: Context) -> bool:
         return ctx.author.id == 723943620054614047

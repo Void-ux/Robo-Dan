@@ -51,10 +51,3 @@ dependencies = [
 requires-python = "==3.12.*"
 readme = "README.md"
 license = {text = "MIT"}
-
-[project.optional-dependencies]
-stt = [
-    "torch>=2.3.1",
-    "openai-whisper>=20231117",
-    "discord-ext-voice-recv>=0.4.2a145",
-]

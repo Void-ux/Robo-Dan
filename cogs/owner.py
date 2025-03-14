@@ -13,6 +13,7 @@ import yarl
 from bot import RoboDan
 from utils import formats
 from utils.context import GuildContext
+from utils.formats import plural
 
 
 class Owner(commands.Cog):
@@ -101,17 +102,18 @@ class Owner(commands.Cog):
     @commands.command(aliases=['ae'])
     @commands.guild_only()
     @commands.is_owner()
-    async def addemote(self, ctx: GuildContext, *emojis: discord.PartialEmoji | str):
+    async def addemoji(self, ctx: GuildContext, *emojis: discord.PartialEmoji | str):
         """Adds any given emotes to the server (the name remains the same)."""
         ordinal = lambda n: "%d%s" % (n, "tsnrhtdd"[(n//10 % 10 != 1)*(n % 10 < 4) * n % 10::4])  # noqa
         def is_url(a):
-            return isinstance(a, str) and bool(formats._URL_REGEX.match(a))
+            return isinstance(a, str) and bool(formats.URL_REGEX.match(a))
 
         created_emojis = []
         for c, emoji in enumerate(emojis):
             if isinstance(emoji, discord.PartialEmoji):
-                created_emojis.append(await ctx.guild.create_custom_emoji(
-                    name=emoji.name, image=await emoji.read(), reason=f'{ctx.author} used addemote.'
+                created_emojis.append(await self.bot.create_emoji(
+                    name=emoji.name,
+                    image_url=emoji.url
                 ))
             elif is_url(emoji):
                 urls = list(filter(lambda x: is_url(x), emojis))
@@ -135,7 +137,13 @@ class Owner(commands.Cog):
                         reason=f'{ctx.author} used addemote.'
                     ))
                 except discord.HTTPException:
-                    await ctx.deny(f'Unable to convert the <{ordinal(c)}> URL to an emoji.')
+                    text = '\n'.join(str(i) for i in created_emojis)
+                    await ctx.deny(
+                        f'Created {plural(len(created_emojis)):emoji}. '
+                        f'Unable to convert the <{ordinal(c)}> URL to an emoji.\n```\n' + text + '```'
+                    )
+        text = '\n'.join(f'<:{i['name']}:{i['id']}>' for i in created_emojis)
+        await ctx.send(f'Created {plural(len(created_emojis)):emoji}.\n```' + text + '```')
 
 
 async def setup(bot: RoboDan):
