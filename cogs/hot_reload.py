@@ -12,9 +12,30 @@ from colorama import Fore
 from utils.interaction import Interaction
 from utils.context import Context
 
+__all__ = ('ignore_hot_reload', )
 log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
 
 IGNORE_EXTENSIONS = ('jishaku', 'cogs.hot_reload')
+
+
+def ignore_hot_reload(cls):
+    """Block `cogs.hot_reload` from reloading commands in this cog.
+    
+    This is useful when your cogs begins relying upon state, like:
+    - db connections
+    - Complex object refs
+
+    Example
+    >>> ...
+    >>> from .hot_reload import ignore_hot_reload
+    >>> 
+    >>> @ignore_hot_reload
+    >>> class MyCog(commands.Cog)
+    >>>     def __init__(self, bot: Bot):
+    """
+    cls._hot_reload_ignored = True
+    return cls
 
 
 def colour_format(m) -> str:
@@ -94,7 +115,6 @@ class LazyHotReload(commands.Cog):
         :class:`bool`
             True if command execution is to proceed, False when reload is required.
         """
-        assert ctx.command
         ext = ctx.command.module
         if ext not in self.bot.extensions:
            log.info('%s is not being tracked.', ext)
@@ -105,8 +125,13 @@ class LazyHotReload(commands.Cog):
             log.info('Unknown module %s; will continue to monitor.', ext)
             return True
 
+        cog = ctx.cog
+        if cog and hasattr(cog.__class__, '_hot_reload_ignored') and cog.__class__._hot_reload_ignored:  # pyright: ignore
+            log.debug('Skipping %s; _hot_reload_ignored flag set to True', ext)
+            return True
+
         if last_modified is None or last_modified <= self.last_modified_times[ext]:
-            log.info('Skipping %s; already up to date.', ext)
+            log.debug('Skipping %s; already up to date.', ext)
             return True
 
         success = await self.reload_extension(ext)
@@ -115,7 +140,7 @@ class LazyHotReload(commands.Cog):
 
         command = self.bot.get_command(ctx.command.qualified_name)
         if command is None:
-            log.info('Command not found.')
+            log.info('Command %s in updated %s not found.', command, ext)
             return True
 
         ctx.command = command
@@ -186,9 +211,9 @@ class LazyHotReload(commands.Cog):
         else:
             await ctx.send(f'\N{OK HAND SIGN} *(in {round((end - start) * 100, 2)}ms)*')
 
-    @reload.command(name='stats', aliases=['info'])
+    @reload.command(name='all')
     @commands.is_owner()
-    async def reload_stats(self, ctx: Context):
+    async def reload_all(self, ctx: Context):
         """Displays information for all the currently online modules."""
         rows = []
         for ext in Path('cogs').iterdir():
@@ -196,9 +221,9 @@ class LazyHotReload(commands.Cog):
                 continue
 
             if f'cogs.{(ext := ext.name.replace('.py', ''))}' in self.bot.extensions:
-                text = f'<:tick:1349188008028672020> **Active** `cogs.{ext}`'
+                text = f'<:Tick:857994584198086666> **Active** `cogs.{ext}`'
             else:
-                text = f'<:cross:1349188010016768071> **Inactive** `cogs.{ext}`'
+                text = f'<:Cross:941933851096285225> **Inactive** `cogs.{ext}`'
 
             rows.append(text)
             
