@@ -194,6 +194,7 @@ class YouTube(commands.Cog):
         file_name = f"{title}.{ext}"
         file_size = file.stat().st_size
         probe = get_video_info(file)
+        info = ''
         if probe:
             info = textwrap.dedent(f"""```
                 Title: {probe.file_name}
@@ -203,8 +204,6 @@ class YouTube(commands.Cog):
                 Format: {probe.format}
                 Metadata: {', '.join(k for k in probe.metadata.keys())}```
             """)
-        else:
-            info = ''
 
         # bots have a limit of 8mb per file
         try:
